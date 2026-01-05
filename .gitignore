@@ -213,3 +213,9 @@ archive/
 *.json
 !examples/*.json
 !package*.json
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
