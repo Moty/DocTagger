@@ -5,7 +5,7 @@ import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from .config import Config, get_config
 from .models import ProcessingResult
@@ -98,7 +98,7 @@ class FileOrganizer:
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-    def apply_macos_tags(self, file_path: Path, tags: list[str]) -> bool:
+    def apply_macos_tags(self, file_path: Path, tags: List[str]) -> bool:
         """
         Apply macOS Finder tags to a file.
 
