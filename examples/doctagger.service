@@ -1,0 +1,18 @@
+# Example systemd service file for DocTagger watcher
+# Place in /etc/systemd/system/doctagger.service
+
+[Unit]
+Description=DocTagger PDF Processing Service
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/home/youruser/DocTagger
+Environment="PATH=/home/youruser/.local/bin:/usr/local/bin:/usr/bin"
+ExecStart=/home/youruser/.local/bin/doctagger watch --process-existing
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
