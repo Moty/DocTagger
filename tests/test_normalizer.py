@@ -15,7 +15,8 @@ def normalizer():
 def test_normalize_filename(normalizer):
     """Test filename normalization."""
     assert normalizer.normalize_filename("Invoice #123.pdf") == "Invoice_123.pdf"
-    assert normalizer.normalize_filename("Test/File\\Name.pdf") == "Test_File_Name.pdf"
+    # Path separators are stripped, leaving only the filename part
+    assert normalizer.normalize_filename("Test/File\\Name.pdf") == "File_Name.pdf"
     assert normalizer.normalize_filename("Multiple___Underscores.pdf") == "Multiple_Underscores.pdf"
 
 

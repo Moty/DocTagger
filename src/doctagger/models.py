@@ -5,7 +5,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ProcessingStatus(str, Enum):
@@ -72,13 +72,12 @@ class ProcessingResult(BaseModel):
     processing_time: float = 0.0
     timestamp: datetime = Field(default_factory=datetime.now)
 
-    class Config:
-        """Pydantic config."""
-
-        json_encoders = {
+    model_config = ConfigDict(
+        json_encoders={
             Path: str,
             datetime: lambda v: v.isoformat(),
         }
+    )
 
 
 class ProcessingRequest(BaseModel):
@@ -109,12 +108,11 @@ class DocumentListItem(BaseModel):
     processed_at: datetime
     size_bytes: int
 
-    class Config:
-        """Pydantic config."""
-
-        json_encoders = {
+    model_config = ConfigDict(
+        json_encoders={
             datetime: lambda v: v.isoformat(),
         }
+    )
 
 
 class SystemStatus(BaseModel):
