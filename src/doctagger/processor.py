@@ -161,6 +161,10 @@ class DocumentProcessor:
             Dictionary with system status
         """
         status = {
+            "llm_available": False,
+            "llm_provider": str(self.config.llm.provider.value),
+            "llm_model": self.config.llm.model,
+            # Deprecated fields for backward compatibility
             "ollama_available": False,
             "ollama_model": None,
             "inbox_folder": str(self.config.inbox_folder),
@@ -169,12 +173,13 @@ class DocumentProcessor:
             "macos_tags_enabled": self.config.macos_tags.enabled,
         }
 
-        # Check Ollama
+        # Check LLM availability
         try:
             if self.llm_tagger.check_availability():
-                status["ollama_available"] = True
-                status["ollama_model"] = self.config.ollama.model
+                status["llm_available"] = True
+                status["ollama_available"] = True  # backward compat
+                status["ollama_model"] = self.config.llm.model
         except Exception as e:
-            logger.warning(f"Ollama check failed: {e}")
+            logger.warning(f"LLM check failed: {e}")
 
         return status

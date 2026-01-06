@@ -6,6 +6,9 @@ import type {
   UploadResponse,
   ProcessingStatusResponse,
   WebSocketMessage,
+  BatchUploadResponse,
+  BatchStatusResponse,
+  CustomPrompt,
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -93,6 +96,84 @@ export class DocTaggerAPI {
     }
 
     return response.json();
+  }
+
+  async uploadBatch(files: File[]): Promise<BatchUploadResponse> {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append("files", file);
+    });
+
+    const response = await fetch(`${this.baseUrl}/api/batch/upload`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Failed to upload batch");
+    }
+
+    return response.json();
+  }
+
+  async getBatchStatus(batchId: string): Promise<BatchStatusResponse> {
+    const response = await fetch(`${this.baseUrl}/api/batch/${batchId}`);
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch batch status");
+    }
+
+    return response.json();
+  }
+
+  async getPrompts(): Promise<CustomPrompt[]> {
+    const response = await fetch(`${this.baseUrl}/api/prompts`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch prompts");
+    }
+    return response.json();
+  }
+
+  async createPrompt(prompt: Omit<CustomPrompt, "id">): Promise<CustomPrompt> {
+    const response = await fetch(`${this.baseUrl}/api/prompts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(prompt),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Failed to create prompt");
+    }
+
+    return response.json();
+  }
+
+  async updatePrompt(id: string, prompt: Partial<CustomPrompt>): Promise<CustomPrompt> {
+    const response = await fetch(`${this.baseUrl}/api/prompts/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(prompt),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Failed to update prompt");
+    }
+
+    return response.json();
+  }
+
+  async deletePrompt(id: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/api/prompts/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Failed to delete prompt");
+    }
   }
 
   createWebSocket(

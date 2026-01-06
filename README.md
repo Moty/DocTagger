@@ -1,25 +1,30 @@
 # DocTagger
 
-Automatically tag and organize PDF documents using local LLM (Ollama).
+Automatically tag and organize PDF documents using local LLMs (Ollama, LM Studio, or any OpenAI-compatible server).
 
 ## Features
 
 - 📂 **Folder Watching**: Automatically processes new PDFs added to an inbox folder
 - 🔍 **OCR Support**: Ensures OCR text exists using OCRmyPDF
-- 🤖 **LLM Tagging**: Uses local Ollama LLM to intelligently tag and categorize documents
+- 🤖 **Multi-LLM Support**: Works with Ollama, LM Studio, vLLM, or any OpenAI-compatible API
 - 📝 **Metadata Management**: Applies PDF metadata (keywords, title) in a portable way
 - 🏷️ **macOS Tags**: Optional Finder tags support for macOS users
 - 📦 **Auto-Organization**: Moves processed PDFs to organized archive structure
 - 📋 **Traceability**: Writes sidecar JSON files for complete processing history
-- 🌐 **HTTP API**: Optional FastAPI service for remote/web access
-- 💻 **React UI**: Modern web interface for managing documents
+- 🌐 **HTTP API**: FastAPI service with batch processing and custom prompts
+- 💻 **React UI**: Modern Next.js web interface for managing documents
+- 🔌 **Plugin System**: Extensible architecture for custom processors and storage
+- ☁️ **Cloud Storage**: Support for AWS S3, Google Cloud Storage, and Azure Blob
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.9+
-- [Ollama](https://ollama.ai/) installed and running locally
+- **LLM Server** (choose one):
+  - [Ollama](https://ollama.ai/) - Local LLM server
+  - [LM Studio](https://lmstudio.ai/) - Desktop app with OpenAI-compatible API
+  - Any OpenAI-compatible API endpoint
 - Optional: Tesseract OCR for better OCR results
 
 ### Installation
@@ -47,8 +52,11 @@ doctagger watch /path/to/inbox --archive /path/to/archive
 # Process a single PDF
 doctagger process /path/to/document.pdf
 
-# Configure settings
-doctagger config --set ollama.model=llama2 --set ollama.url=http://localhost:11434
+# Batch process multiple PDFs
+doctagger batch /path/to/folder --parallel 4
+
+# Check system status
+doctagger status
 ```
 
 #### Server Mode
@@ -63,38 +71,38 @@ doctagger-server
 
 ## Configuration
 
-Create a `.env` file or `config.yaml` in your project directory:
+Create a `.env` file in your project directory:
 
-```yaml
+```env
 # Folder paths
-inbox_folder: /path/to/inbox
-archive_folder: /path/to/archive
+INBOX_FOLDER=/path/to/inbox
+ARCHIVE_FOLDER=/path/to/archive
 
-# Ollama settings
-ollama:
-  url: http://localhost:11434
-  model: llama2
-  timeout: 60
+# LLM Provider: 'ollama' or 'openai'
+LLM_PROVIDER=ollama
+LLM_MODEL=llama2
+
+# Ollama settings (if using Ollama)
+LLM_OLLAMA_URL=http://localhost:11434
+
+# OpenAI-compatible settings (if using LM Studio, vLLM, etc.)
+# LLM_PROVIDER=openai
+# LLM_MODEL=your-model-name
+# LLM_OPENAI_BASE_URL=http://localhost:1234/v1
+# LLM_OPENAI_API_KEY=not-needed
 
 # OCR settings
-ocr:
-  enabled: true
-  language: eng
-  skip_if_exists: true
+OCR__ENABLED=true
+OCR__LANGUAGE=eng
+OCR__SKIP_IF_EXISTS=true
 
 # Tagging settings
-tags:
-  max_tags: 10
-  custom_categories:
-    - Invoice
-    - Contract
-    - Receipt
-    - Letter
+TAGS__MAX_TAGS=10
+TAGS__CUSTOM_CATEGORIES=Invoice,Contract,Receipt,Letter
 
 # macOS Finder tags (optional)
-macos_tags:
-  enabled: false
-  color_mapping: true
+MACOS_TAGS__ENABLED=false
+MACOS_TAGS__COLOR_MAPPING=true
 ```
 
 ## Architecture
@@ -102,18 +110,20 @@ macos_tags:
 ```
 DocTagger/
 ├── src/doctagger/           # Core Python package
-│   ├── cli.py              # CLI entry point
-│   ├── server.py           # FastAPI server
+│   ├── cli.py              # CLI entry point (with batch processing)
+│   ├── server.py           # FastAPI server (with batch & prompts API)
 │   ├── watcher.py          # Folder watcher
 │   ├── ocr.py              # OCR processing
 │   ├── extractor.py        # Text extraction
-│   ├── llm.py              # LLM integration
+│   ├── llm.py              # Multi-provider LLM integration
 │   ├── normalizer.py       # Output normalization
 │   ├── metadata.py         # PDF metadata handling
 │   ├── organizer.py        # File organization
 │   ├── config.py           # Configuration management
-│   └── models.py           # Pydantic models
-├── frontend/               # React frontend
+│   ├── models.py           # Pydantic models
+│   ├── plugins.py          # Plugin system
+│   └── storage.py          # Cloud storage backends
+├── frontend/               # Next.js React frontend
 │   └── ...
 ├── tests/                  # Test suite
 ├── examples/               # Example configs
@@ -160,8 +170,49 @@ Contributions welcome! Please read our contributing guidelines first.
 - [x] Core PDF processing pipeline
 - [x] CLI interface
 - [x] FastAPI server
-- [ ] React frontend
-- [ ] Batch processing
-- [ ] Custom LLM prompts
-- [ ] Plugin system
-- [ ] Cloud storage support
+- [x] React frontend (Next.js with TypeScript)
+- [x] Batch processing (CLI and API)
+- [x] Custom LLM prompts
+- [x] Plugin system
+- [x] Cloud storage support (S3, GCS, Azure)
+- [x] OpenAI-compatible LLM support (LM Studio, etc.)
+
+## Cloud Storage
+
+DocTagger supports multiple cloud storage backends. Install the optional dependencies:
+
+```bash
+# AWS S3
+pip install "doctagger[s3]"
+
+# Google Cloud Storage
+pip install "doctagger[gcs]"
+
+# Azure Blob Storage
+pip install "doctagger[azure]"
+
+# All cloud providers
+pip install "doctagger[cloud]"
+```
+
+## LLM Providers
+
+DocTagger supports multiple LLM backends:
+
+- **Ollama** (default): Local LLM server
+- **OpenAI-compatible**: LM Studio, vLLM, or any OpenAI API compatible server
+
+Configure in `.env`:
+
+```env
+# For Ollama (default)
+LLM_PROVIDER=ollama
+LLM_MODEL=llama2
+LLM_OLLAMA_URL=http://localhost:11434
+
+# For LM Studio or OpenAI-compatible
+LLM_PROVIDER=openai
+LLM_MODEL=your-model-name
+LLM_OPENAI_BASE_URL=http://localhost:1234/v1
+LLM_OPENAI_API_KEY=not-needed
+```

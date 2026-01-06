@@ -40,8 +40,12 @@ export interface ProcessingResult {
 }
 
 export interface SystemStatus {
-  ollama_available: boolean;
-  ollama_model: string | null;
+  llm_available: boolean;
+  llm_provider: string | null;
+  llm_model: string | null;
+  // Deprecated fields for backward compatibility
+  ollama_available?: boolean;
+  ollama_model?: string | null;
   inbox_folder: string | null;
   archive_folder: string | null;
   watching: boolean;
@@ -71,13 +75,55 @@ export interface ProcessingStatusResponse {
   message: string | null;
 }
 
+export interface BatchUploadResponse {
+  batch_id: string;
+  files: Array<{
+    request_id: string;
+    filename: string;
+  }>;
+  message: string;
+}
+
+export interface BatchStatusResponse {
+  batch_id: string;
+  total: number;
+  completed: number;
+  failed: number;
+  pending: number;
+  files: Array<{
+    request_id: string;
+    filename: string;
+    status: ProcessingStatus;
+    error?: string;
+  }>;
+}
+
+export interface CustomPrompt {
+  id: string;
+  name: string;
+  description: string;
+  prompt_template: string;
+  document_types: string[];
+  is_default: boolean;
+}
+
 export interface WebSocketMessage {
-  type: "status_update" | "completed" | "error";
-  request_id: string;
+  type: "status_update" | "completed" | "error" | "batch_progress";
+  request_id?: string;
+  batch_id?: string;
   status?: string;
   error?: string;
+  progress?: {
+    completed: number;
+    total: number;
+  };
   result?: {
     title: string | null;
+    document_type: string | null;
+    tags: string[];
+    archive_path: string | null;
+  };
+}
     document_type: string | null;
     tags: string[];
     archive_path: string | null;

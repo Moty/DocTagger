@@ -88,6 +88,102 @@ def process(
 
 
 @cli.command()
+@click.argument("pdf_paths", nargs=-1, type=click.Path(exists=True, dir_okay=False))
+@click.option("--folder", "-f", type=click.Path(exists=True, file_okay=False), help="Process all PDFs in folder")
+@click.option("--skip-ocr", is_flag=True, help="Skip OCR processing")
+@click.option("--skip-archive", is_flag=True, help="Skip archiving")
+@click.option("--parallel", "-p", default=1, help="Number of parallel workers")
+@click.pass_context
+def batch(
+    ctx: click.Context,
+    pdf_paths: tuple,
+    folder: Optional[str],
+    skip_ocr: bool,
+    skip_archive: bool,
+    parallel: int,
+) -> None:
+    """Process multiple PDF files in batch."""
+    import concurrent.futures
+
+    config = ctx.obj["config"]
+    processor = DocumentProcessor(config)
+
+    # Collect all PDF files
+    files_to_process = []
+
+    # Add individual files
+    for path in pdf_paths:
+        files_to_process.append(Path(path))
+
+    # Add files from folder
+    if folder:
+        folder_path = Path(folder)
+        files_to_process.extend(folder_path.glob("*.pdf"))
+
+    if not files_to_process:
+        click.echo(click.style("No PDF files to process", fg="yellow"))
+        return
+
+    click.echo(f"Processing {len(files_to_process)} files with {parallel} worker(s)...")
+
+    completed = 0
+    failed = 0
+    results = []
+
+    def process_file(pdf_file: Path) -> tuple:
+        try:
+            result = processor.process(pdf_file, skip_ocr=skip_ocr, skip_archive=skip_archive)
+            return (pdf_file, result, None)
+        except Exception as e:
+            return (pdf_file, None, str(e))
+
+    with click.progressbar(length=len(files_to_process), label="Processing") as bar:
+        if parallel > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as executor:
+                futures = {executor.submit(process_file, f): f for f in files_to_process}
+                for future in concurrent.futures.as_completed(futures):
+                    pdf_file, result, error = future.result()
+                    if error:
+                        failed += 1
+                        results.append((pdf_file.name, "failed", error))
+                    elif result and result.status.value == "completed":
+                        completed += 1
+                        results.append((pdf_file.name, "completed", result.tagging.title if result.tagging else ""))
+                    else:
+                        failed += 1
+                        results.append((pdf_file.name, "failed", result.error if result else "Unknown error"))
+                    bar.update(1)
+        else:
+            for pdf_file in files_to_process:
+                _, result, error = process_file(pdf_file)
+                if error:
+                    failed += 1
+                    results.append((pdf_file.name, "failed", error))
+                elif result and result.status.value == "completed":
+                    completed += 1
+                    results.append((pdf_file.name, "completed", result.tagging.title if result.tagging else ""))
+                else:
+                    failed += 1
+                    results.append((pdf_file.name, "failed", result.error if result else "Unknown error"))
+                bar.update(1)
+
+    # Summary
+    click.echo(f"\n{'='*50}")
+    click.echo(f"Batch processing complete:")
+    click.echo(click.style(f"  ✓ Completed: {completed}", fg="green"))
+    if failed > 0:
+        click.echo(click.style(f"  ✗ Failed: {failed}", fg="red"))
+
+    # Show details
+    if click.confirm("\nShow detailed results?", default=False):
+        for filename, status, info in results:
+            if status == "completed":
+                click.echo(f"  ✓ {filename}: {info}")
+            else:
+                click.echo(click.style(f"  ✗ {filename}: {info}", fg="red"))
+
+
+@cli.command()
 @click.option(
     "--inbox",
     type=click.Path(file_okay=False),
@@ -154,13 +250,17 @@ def status(ctx: click.Context) -> None:
     # Check system
     system_status = processor.check_system()
 
-    # Ollama
-    if system_status["ollama_available"]:
-        click.echo(click.style("✓ Ollama available", fg="green"))
-        click.echo(f"  Model: {system_status['ollama_model']}")
+    # LLM
+    provider = system_status.get("llm_provider", "unknown")
+    if system_status["llm_available"]:
+        click.echo(click.style(f"✓ LLM available ({provider})", fg="green"))
+        click.echo(f"  Model: {system_status['llm_model']}")
     else:
-        click.echo(click.style("✗ Ollama not available", fg="red"))
-        click.echo("  Make sure Ollama is running: ollama serve")
+        click.echo(click.style(f"✗ LLM not available ({provider})", fg="red"))
+        if provider == "ollama":
+            click.echo("  Make sure Ollama is running: ollama serve")
+        else:
+            click.echo("  Make sure LM Studio is running with the server enabled")
 
     # Folders
     click.echo(f"\nInbox folder: {system_status['inbox_folder']}")

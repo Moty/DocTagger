@@ -40,6 +40,22 @@ dev = [
 macos = [
     "pyobjc-framework-Cocoa>=9.0",
 ]
+s3 = [
+    "boto3>=1.28.0",
+]
+gcs = [
+    "google-cloud-storage>=2.10.0",
+]
+azure = [
+    "azure-storage-blob>=12.17.0",
+    "azure-identity>=1.14.0",
+]
+cloud = [
+    "boto3>=1.28.0",
+    "google-cloud-storage>=2.10.0",
+    "azure-storage-blob>=12.17.0",
+    "azure-identity>=1.14.0",
+]
 
 [project.scripts]
 doctagger = "doctagger.cli:main"

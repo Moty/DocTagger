@@ -9,7 +9,9 @@
    python3 --version
    ```
 
-2. **Ollama** - Local LLM server
+2. **LLM Provider** - Choose one:
+   
+   **Option A: Ollama** (Local LLM server)
    - Download from [ollama.ai](https://ollama.ai)
    - Install and start the service:
      ```bash
@@ -19,6 +21,14 @@
      ```bash
      ollama pull llama2
      ```
+   
+   **Option B: LM Studio** (OpenAI-compatible)
+   - Download from [lmstudio.ai](https://lmstudio.ai)
+   - Load a model (e.g., GLM-4, Llama 3, Mistral)
+   - Start the local server (default: `http://localhost:1234`)
+   
+   **Option C: Other OpenAI-compatible servers**
+   - vLLM, text-generation-webui, or any OpenAI API compatible endpoint
 
 3. **Tesseract OCR** (for OCRmyPDF)
    
@@ -61,7 +71,26 @@ pip install -e ".[dev]"
 pip install -e ".[macos]"
 ```
 
-### Option 2: Install from PyPI (When published)
+### Option 2: Install with Cloud Storage Support
+
+```bash
+# AWS S3 support
+pip install -e ".[s3]"
+
+# Google Cloud Storage support
+pip install -e ".[gcs]"
+
+# Azure Blob Storage support
+pip install -e ".[azure]"
+
+# All cloud providers
+pip install -e ".[cloud]"
+
+# Combine with other options
+pip install -e ".[dev,s3,macos]"
+```
+
+### Option 3: Install from PyPI (When published)
 
 ```bash
 pip install doctagger
@@ -84,9 +113,17 @@ Edit `.env` with your settings:
 INBOX_FOLDER=/path/to/inbox
 ARCHIVE_FOLDER=/path/to/archive
 
-# Ollama settings
-OLLAMA__URL=http://localhost:11434
-OLLAMA__MODEL=llama2
+# LLM Provider: 'ollama' or 'openai'
+LLM_PROVIDER=ollama
+LLM_MODEL=llama2
+
+# Ollama settings (if LLM_PROVIDER=ollama)
+LLM_OLLAMA_URL=http://localhost:11434
+
+# OpenAI-compatible settings (if LLM_PROVIDER=openai)
+# For LM Studio, vLLM, or other OpenAI API compatible servers
+LLM_OPENAI_BASE_URL=http://localhost:1234/v1
+LLM_OPENAI_API_KEY=not-needed
 
 # OCR settings
 OCR__ENABLED=true
@@ -94,6 +131,29 @@ OCR__LANGUAGE=eng
 
 # Archive structure
 ARCHIVE_STRUCTURE={year}/{month}/{document_type}
+```
+
+### Example: LM Studio Configuration
+
+```env
+LLM_PROVIDER=openai
+LLM_MODEL=your-model-name
+LLM_OPENAI_BASE_URL=http://localhost:1234/v1
+LLM_OPENAI_API_KEY=not-needed
+```
+
+### Example: Cloud Storage Configuration
+
+```env
+# AWS S3
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+
+# Google Cloud Storage
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
+
+# Azure Blob Storage
+AZURE_STORAGE_CONNECTION_STRING=your-connection-string
 ```
 
 ### Configuration File
@@ -210,11 +270,18 @@ launchctl load ~/Library/LaunchAgents/com.doctagger.watcher.plist
 
 ## Troubleshooting
 
-### Ollama Connection Issues
+### LLM Connection Issues
 
+**For Ollama:**
 - Ensure Ollama is running: `ollama list`
-- Check the URL in config: `OLLAMA__URL=http://localhost:11434`
+- Check the URL in config: `LLM_OLLAMA_URL=http://localhost:11434`
 - Test connectivity: `curl http://localhost:11434/api/tags`
+
+**For LM Studio:**
+- Ensure LM Studio server is running (check the "Server" tab)
+- Verify the model is loaded
+- Test connectivity: `curl http://localhost:1234/v1/models`
+- Check your `.env` settings: `LLM_PROVIDER=openai`
 
 ### OCR Failures
 

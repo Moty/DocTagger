@@ -14,6 +14,10 @@ from pydantic import BaseModel
 from . import __version__
 from .config import Config, get_config
 from .models import (
+    BatchFileStatus,
+    BatchStatusResponse,
+    BatchUploadResponse,
+    CustomPrompt,
     DocumentListItem,
     ProcessingRequest,
     ProcessingResult,
@@ -31,6 +35,8 @@ config: Config = get_config()
 processor: DocumentProcessor = DocumentProcessor(config)
 watcher: Optional[FolderWatcher] = None
 processing_tasks: Dict[str, ProcessingResult] = {}
+batch_tasks: Dict[str, Dict[str, any]] = {}  # batch_id -> {files: [...], status: {...}}
+custom_prompts: Dict[str, CustomPrompt] = {}  # id -> CustomPrompt
 websocket_connections: List[WebSocket] = []
 
 
@@ -144,7 +150,10 @@ async def get_status() -> SystemStatus:
     system_status = processor.check_system()
 
     return SystemStatus(
-        ollama_available=system_status["ollama_available"],
+        llm_available=system_status["llm_available"],
+        llm_provider=system_status.get("llm_provider"),
+        llm_model=system_status.get("llm_model"),
+        ollama_available=system_status.get("ollama_available"),
         ollama_model=system_status.get("ollama_model"),
         inbox_folder=str(config.inbox_folder),
         archive_folder=str(config.archive_folder),
@@ -335,6 +344,219 @@ async def stop_watcher() -> dict:
     except Exception as e:
         logger.error(f"Failed to stop watcher: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to stop watcher: {e}")
+
+
+# ============ Batch Processing Endpoints ============
+
+
+@app.post("/api/batch/upload", response_model=BatchUploadResponse)
+async def upload_batch(
+    background_tasks: BackgroundTasks,
+    files: List[UploadFile] = File(...),
+) -> BatchUploadResponse:
+    """
+    Upload multiple PDF files for batch processing.
+
+    Args:
+        files: List of PDF files to process
+        background_tasks: FastAPI background tasks
+
+    Returns:
+        BatchUploadResponse with batch ID and file info
+    """
+    batch_id = str(uuid4())
+    file_info = []
+
+    for file in files:
+        if not file.filename.endswith(".pdf"):
+            continue
+
+        request_id = str(uuid4())
+        file_path = config.inbox_folder / file.filename
+
+        # Handle duplicates
+        if file_path.exists():
+            counter = 1
+            stem = file_path.stem
+            while file_path.exists():
+                file_path = config.inbox_folder / f"{stem}_{counter}.pdf"
+                counter += 1
+
+        try:
+            content = await file.read()
+            with open(file_path, "wb") as f:
+                f.write(content)
+
+            file_info.append({
+                "request_id": request_id,
+                "filename": file_path.name,
+            })
+
+            # Initialize processing status
+            processing_tasks[request_id] = ProcessingResult(
+                status=ProcessingStatus.PENDING,
+                original_path=file_path,
+            )
+
+            # Add background task
+            background_tasks.add_task(
+                process_batch_document, batch_id, request_id, file_path
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to save file {file.filename}: {e}")
+            continue
+
+    # Initialize batch tracking
+    batch_tasks[batch_id] = {
+        "files": file_info,
+        "total": len(file_info),
+        "completed": 0,
+        "failed": 0,
+    }
+
+    return BatchUploadResponse(
+        batch_id=batch_id,
+        files=file_info,
+        message=f"Batch upload started with {len(file_info)} files",
+    )
+
+
+async def process_batch_document(batch_id: str, request_id: str, file_path: Path) -> None:
+    """Background task to process a document in a batch."""
+    try:
+        await process_document_task(request_id, file_path)
+
+        # Update batch status
+        if batch_id in batch_tasks:
+            result = processing_tasks.get(request_id)
+            if result and result.status == ProcessingStatus.COMPLETED:
+                batch_tasks[batch_id]["completed"] += 1
+            elif result and result.status == ProcessingStatus.FAILED:
+                batch_tasks[batch_id]["failed"] += 1
+
+            # Notify batch progress
+            await notify_websockets({
+                "type": "batch_progress",
+                "batch_id": batch_id,
+                "progress": {
+                    "completed": batch_tasks[batch_id]["completed"],
+                    "total": batch_tasks[batch_id]["total"],
+                },
+            })
+
+    except Exception as e:
+        logger.error(f"Batch document processing failed: {e}")
+        if batch_id in batch_tasks:
+            batch_tasks[batch_id]["failed"] += 1
+
+
+@app.get("/api/batch/{batch_id}", response_model=BatchStatusResponse)
+async def get_batch_status(batch_id: str) -> BatchStatusResponse:
+    """
+    Get status of a batch processing job.
+
+    Args:
+        batch_id: Batch ID
+
+    Returns:
+        BatchStatusResponse with detailed status
+    """
+    if batch_id not in batch_tasks:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    batch = batch_tasks[batch_id]
+    files_status = []
+
+    for file_info in batch["files"]:
+        request_id = file_info["request_id"]
+        result = processing_tasks.get(request_id)
+
+        files_status.append(BatchFileStatus(
+            request_id=request_id,
+            filename=file_info["filename"],
+            status=result.status if result else ProcessingStatus.PENDING,
+            error=result.error if result else None,
+        ))
+
+    pending = sum(1 for f in files_status if f.status in [ProcessingStatus.PENDING, ProcessingStatus.PROCESSING])
+
+    return BatchStatusResponse(
+        batch_id=batch_id,
+        total=batch["total"],
+        completed=batch["completed"],
+        failed=batch["failed"],
+        pending=pending,
+        files=files_status,
+    )
+
+
+# ============ Custom Prompts Endpoints ============
+
+
+@app.get("/api/prompts", response_model=List[CustomPrompt])
+async def list_prompts() -> List[CustomPrompt]:
+    """List all custom prompts."""
+    return list(custom_prompts.values())
+
+
+@app.post("/api/prompts", response_model=CustomPrompt)
+async def create_prompt(prompt: CustomPrompt) -> CustomPrompt:
+    """
+    Create a new custom prompt.
+
+    Args:
+        prompt: CustomPrompt data
+
+    Returns:
+        Created CustomPrompt
+    """
+    if not prompt.id:
+        prompt.id = str(uuid4())
+
+    if prompt.id in custom_prompts:
+        raise HTTPException(status_code=400, detail="Prompt with this ID already exists")
+
+    custom_prompts[prompt.id] = prompt
+    return prompt
+
+
+@app.get("/api/prompts/{prompt_id}", response_model=CustomPrompt)
+async def get_prompt(prompt_id: str) -> CustomPrompt:
+    """Get a specific prompt by ID."""
+    if prompt_id not in custom_prompts:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return custom_prompts[prompt_id]
+
+
+@app.put("/api/prompts/{prompt_id}", response_model=CustomPrompt)
+async def update_prompt(prompt_id: str, prompt: CustomPrompt) -> CustomPrompt:
+    """
+    Update an existing prompt.
+
+    Args:
+        prompt_id: Prompt ID
+        prompt: Updated CustomPrompt data
+
+    Returns:
+        Updated CustomPrompt
+    """
+    if prompt_id not in custom_prompts:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    prompt.id = prompt_id
+    custom_prompts[prompt_id] = prompt
+    return prompt
+
+
+@app.delete("/api/prompts/{prompt_id}")
+async def delete_prompt(prompt_id: str) -> dict:
+    """Delete a prompt."""
+    if prompt_id not in custom_prompts:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    del custom_prompts[prompt_id]
+    return {"message": "Prompt deleted successfully"}
 
 
 @app.websocket("/api/ws")

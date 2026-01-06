@@ -118,10 +118,66 @@ class DocumentListItem(BaseModel):
 class SystemStatus(BaseModel):
     """System status information."""
 
-    ollama_available: bool
+    llm_available: bool
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    # Deprecated fields for backward compatibility
+    ollama_available: Optional[bool] = None
     ollama_model: Optional[str] = None
     inbox_folder: Optional[str] = None
     archive_folder: Optional[str] = None
     watching: bool = False
     processed_count: int = 0
     failed_count: int = 0
+
+
+class BatchFileStatus(BaseModel):
+    """Status of a single file in a batch."""
+
+    request_id: str
+    filename: str
+    status: ProcessingStatus
+    error: Optional[str] = None
+
+
+class BatchUploadResponse(BaseModel):
+    """Response for batch file upload."""
+
+    batch_id: str
+    files: List[Dict[str, str]]
+    message: str
+
+
+class BatchStatusResponse(BaseModel):
+    """Status response for batch processing."""
+
+    batch_id: str
+    total: int
+    completed: int
+    failed: int
+    pending: int
+    files: List[BatchFileStatus]
+
+
+class CustomPrompt(BaseModel):
+    """Custom LLM prompt template."""
+
+    id: str
+    name: str
+    description: str
+    prompt_template: str
+    document_types: List[str] = Field(default_factory=list)
+    is_default: bool = False
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "invoice-detailed",
+                "name": "Detailed Invoice Analysis",
+                "description": "Extract detailed line items from invoices",
+                "prompt_template": "Analyze this invoice document...",
+                "document_types": ["invoice", "receipt"],
+                "is_default": False,
+            }
+        }
+    )

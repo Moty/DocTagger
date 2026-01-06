@@ -88,9 +88,28 @@ doctagger status
 ```
 
 Shows:
-- Ollama availability and model
+- LLM availability and provider (Ollama or OpenAI-compatible)
+- LLM model name
 - Folder paths
 - Feature status (OCR, macOS tags)
+
+### `doctagger batch`
+
+Process multiple PDFs in a folder.
+
+**Options:**
+- `--parallel N` - Number of parallel workers (default: 4)
+- `--folder PATH` - Process all PDFs in folder
+
+**Examples:**
+
+```bash
+# Batch process with 4 workers
+doctagger batch /path/to/pdfs --parallel 4
+
+# Process folder with 8 parallel workers
+doctagger batch --folder ~/Documents/ToProcess --parallel 8
+```
 
 ### `doctagger config`
 
@@ -142,14 +161,60 @@ curl http://localhost:8000/api/status
 Response:
 ```json
 {
-  "ollama_available": true,
-  "ollama_model": "llama2",
+  "llm_available": true,
+  "llm_provider": "openai",
+  "llm_model": "glm-4.6v-flash",
   "inbox_folder": "/path/to/inbox",
   "archive_folder": "/path/to/archive",
   "watching": false,
   "processed_count": 42,
   "failed_count": 1
 }
+```
+
+#### POST `/api/batch/upload`
+
+Upload multiple PDFs for batch processing.
+
+```bash
+curl -X POST -F "files=@doc1.pdf" -F "files=@doc2.pdf" http://localhost:8000/api/batch/upload
+```
+
+Response:
+```json
+{
+  "batch_id": "batch_abc123",
+  "total_files": 2,
+  "message": "Batch processing started"
+}
+```
+
+#### GET `/api/batch/{batch_id}`
+
+Check batch processing status.
+
+```bash
+curl http://localhost:8000/api/batch/batch_abc123
+```
+
+#### Custom Prompts API
+
+```bash
+# List all prompts
+curl http://localhost:8000/api/prompts
+
+# Create a prompt
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"name": "invoice", "template": "Extract invoice data..."}' \
+  http://localhost:8000/api/prompts
+
+# Update a prompt
+curl -X PUT -H "Content-Type: application/json" \
+  -d '{"template": "Updated template..."}' \
+  http://localhost:8000/api/prompts/invoice
+
+# Delete a prompt
+curl -X DELETE http://localhost:8000/api/prompts/invoice
 ```
 
 #### POST `/api/upload`
@@ -283,21 +348,31 @@ OCR__FORCE_OCR=false
 OCR__DESKEW=true
 ```
 
-### Ollama Settings
+### LLM Settings
 
+DocTagger supports two LLM providers:
+
+**Ollama (Default):**
 ```env
-# Ollama API URL
-OLLAMA__URL=http://localhost:11434
-
-# Model to use
-OLLAMA__MODEL=llama2
-
-# Request timeout (seconds)
-OLLAMA__TIMEOUT=60
-
-# Temperature for generation (0.0-1.0)
-OLLAMA__TEMPERATURE=0.1
+LLM_PROVIDER=ollama
+LLM_MODEL=llama2
+LLM_OLLAMA_URL=http://localhost:11434
 ```
+
+**OpenAI-compatible (LM Studio, vLLM, etc.):**
+```env
+LLM_PROVIDER=openai
+LLM_MODEL=your-model-name
+LLM_OPENAI_BASE_URL=http://localhost:1234/v1
+LLM_OPENAI_API_KEY=not-needed
+```
+
+**Common Settings:**
+- `LLM_PROVIDER` - Provider type (`ollama` or `openai`)
+- `LLM_MODEL` - Model to use
+- `LLM_OLLAMA_URL` - Ollama API URL (default: http://localhost:11434)
+- `LLM_OPENAI_BASE_URL` - OpenAI-compatible API base URL
+- `LLM_OPENAI_API_KEY` - API key (use `not-needed` for local servers)
 
 ## macOS Finder Tags
 

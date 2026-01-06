@@ -72,6 +72,10 @@ export function StatusCard() {
 
   if (!status) return null;
 
+  const llmAvailable = status.llm_available ?? status.ollama_available;
+  const llmProvider = status.llm_provider ?? "ollama";
+  const llmModel = status.llm_model ?? status.ollama_model;
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">
@@ -80,23 +84,23 @@ export function StatusCard() {
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-gray-600 dark:text-gray-300">Ollama:</span>
+          <span className="text-gray-600 dark:text-gray-300">LLM ({llmProvider}):</span>
           <span
             className={`px-3 py-1 rounded-full text-sm font-medium ${
-              status.ollama_available
+              llmAvailable
                 ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
                 : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
             }`}
           >
-            {status.ollama_available ? "Available" : "Unavailable"}
+            {llmAvailable ? "Available" : "Unavailable"}
           </span>
         </div>
 
-        {status.ollama_model && (
+        {llmModel && (
           <div className="flex items-center justify-between">
             <span className="text-gray-600 dark:text-gray-300">Model:</span>
-            <span className="text-gray-800 dark:text-white font-mono">
-              {status.ollama_model}
+            <span className="text-gray-800 dark:text-white font-mono text-sm truncate max-w-[180px]" title={llmModel}>
+              {llmModel}
             </span>
           </div>
         )}

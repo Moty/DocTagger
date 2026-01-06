@@ -2,29 +2,35 @@
 
 ## Project Overview
 
-DocTagger is a comprehensive document management system that automatically tags, categorizes, and organizes PDF documents using local Large Language Models (LLM). The system watches an inbox folder for new PDFs, processes them through OCR if needed, extracts text, sends it to a local Ollama LLM for intelligent tagging, and organizes the files with proper metadata.
+DocTagger is a comprehensive document management system that automatically tags, categorizes, and organizes PDF documents using local Large Language Models (LLM). The system watches an inbox folder for new PDFs, processes them through OCR if needed, extracts text, sends it to a local LLM for intelligent tagging, and organizes the files with proper metadata.
 
-## Implementation Status: ✅ COMPLETE
+**Supported LLM Providers:**
+- **Ollama** - Local LLM server (default)
+- **OpenAI-compatible** - LM Studio, vLLM, or any OpenAI API compatible server
 
-All requirements from the problem statement have been successfully implemented.
+## Implementation Status: ✅ COMPLETE (with Extended Features)
+
+All original requirements plus extended roadmap features have been implemented.
 
 ## Components Delivered
 
 ### 1. Core Python Library (`src/doctagger/`)
 
 **Modules:**
-- `cli.py` - Command-line interface with Click
-- `server.py` - FastAPI HTTP server
+- `cli.py` - Command-line interface with Click (includes batch processing)
+- `server.py` - FastAPI HTTP server (with batch & custom prompts API)
 - `watcher.py` - Folder monitoring with watchdog
 - `processor.py` - Main processing pipeline
 - `ocr.py` - OCR integration with OCRmyPDF
 - `extractor.py` - Text extraction with pdfplumber
-- `llm.py` - Ollama LLM integration
+- `llm.py` - Multi-provider LLM integration (Ollama + OpenAI-compatible)
 - `normalizer.py` - Filename and tag normalization
 - `metadata.py` - PDF metadata handling with PyPDF2
 - `organizer.py` - File organization and macOS tags
-- `config.py` - Configuration management
-- `models.py` - Pydantic data models
+- `config.py` - Configuration management (with LLM provider settings)
+- `models.py` - Pydantic data models (batch, prompts, LLM status)
+- `plugins.py` - **NEW** Extensible plugin system
+- `storage.py` - **NEW** Cloud storage backends (S3, GCS, Azure)
 
 **Features:**
 - Modular, maintainable architecture
@@ -33,6 +39,9 @@ All requirements from the problem statement have been successfully implemented.
 - Extensive logging
 - Environment variable configuration
 - Python 3.9+ compatible
+- **Multi-provider LLM support** (Ollama, LM Studio, OpenAI-compatible)
+- **Plugin system** for custom processors, storage, and LLM providers
+- **Cloud storage** support (AWS S3, Google Cloud Storage, Azure Blob)
 
 ### 2. Command-Line Interface
 
@@ -49,6 +58,9 @@ doctagger status
 
 # Configure settings
 doctagger config [--inbox PATH] [--archive PATH] [--ollama-url URL] [--ollama-model MODEL]
+
+# Batch process multiple PDFs
+doctagger batch /path/to/folder --parallel 4
 ```
 
 **Features:**
@@ -67,13 +79,19 @@ doctagger-server
 
 **Endpoints:**
 - `GET /` - Root endpoint
-- `GET /api/status` - System status
+- `GET /api/status` - System status (includes LLM provider info)
 - `POST /api/upload` - Upload PDF for processing
 - `GET /api/process/{request_id}` - Get processing status
 - `GET /api/documents` - List processed documents
 - `POST /api/watcher/start` - Start folder watcher
 - `POST /api/watcher/stop` - Stop folder watcher
 - `WS /api/ws` - WebSocket for real-time updates
+- **`POST /api/batch/upload`** - Upload multiple PDFs for batch processing
+- **`GET /api/batch/{batch_id}`** - Get batch processing status
+- **`GET /api/prompts`** - List custom prompts
+- **`POST /api/prompts`** - Create custom prompt
+- **`PUT /api/prompts/{prompt_id}`** - Update custom prompt
+- **`DELETE /api/prompts/{prompt_id}`** - Delete custom prompt
 
 **Features:**
 - FastAPI with automatic OpenAPI docs (`/docs`)
@@ -131,11 +149,12 @@ npm run build  # Production build
    - Metadata extraction
 
 4. **LLM Tagging**
-   - Ollama integration
+   - **Multi-provider support**: Ollama AND OpenAI-compatible APIs (LM Studio, vLLM)
    - Structured JSON output
-   - Configurable models (llama2, mistral, etc.)
-   - Custom prompts
+   - Configurable models (llama2, mistral, GLM-4, etc.)
+   - **Custom prompt templates** with variable substitution
    - Confidence scoring
+   - **Provider auto-detection** and health checks
 
 5. **Output Normalization**
    - Safe filename generation
@@ -164,6 +183,26 @@ npm run build  # Production build
    - Performance metrics
    - Optional/configurable
 
+10. **Batch Processing**
+    - Process multiple PDFs in parallel
+    - CLI and API support
+    - Progress tracking per file
+    - Configurable worker count
+
+11. **Plugin System**
+    - `ProcessorPlugin` - Custom document processors
+    - `StoragePlugin` - Custom storage backends
+    - `MetadataExtractorPlugin` - Custom metadata extraction
+    - `LLMProviderPlugin` - Custom LLM integrations
+    - Hook system (pre_process, post_process, etc.)
+    - Dynamic plugin loading from directory
+
+12. **Cloud Storage**
+    - AWS S3 (and S3-compatible: MinIO, DigitalOcean Spaces)
+    - Google Cloud Storage
+    - Azure Blob Storage
+    - Lazy-loading clients (install only what you need)
+
 ## Configuration
 
 ### Environment Variables
@@ -174,10 +213,16 @@ Create `.env` file:
 INBOX_FOLDER=/path/to/inbox
 ARCHIVE_FOLDER=/path/to/archive
 
-# Ollama
-OLLAMA__URL=http://localhost:11434
-OLLAMA__MODEL=llama2
-OLLAMA__TEMPERATURE=0.1
+# LLM Provider (ollama or openai)
+LLM_PROVIDER=ollama
+LLM_MODEL=llama2
+
+# Ollama Settings (if using Ollama)
+LLM_OLLAMA_URL=http://localhost:11434
+
+# OpenAI-compatible Settings (if using LM Studio, vLLM, etc.)
+LLM_OPENAI_BASE_URL=http://localhost:1234/v1
+LLM_OPENAI_API_KEY=not-needed
 
 # OCR
 OCR__ENABLED=true
@@ -239,11 +284,17 @@ pytest tests/
 - ocrmypdf - OCR processing
 - PyPDF2 - PDF manipulation
 - pdfplumber - Text extraction
-- ollama - LLM integration
+- ollama - Ollama LLM integration
+- openai - OpenAI-compatible API integration
 - fastapi - Web framework
 - uvicorn - ASGI server
 - pydantic - Data validation
 - click - CLI framework
+
+**Cloud Storage (optional):**
+- boto3 - AWS S3
+- google-cloud-storage - Google Cloud Storage
+- azure-storage-blob - Azure Blob Storage
 
 **Development:**
 - pytest - Testing
@@ -264,8 +315,18 @@ pytest tests/
 # Install package
 pip install -e .
 
-# Install Ollama and pull model
+# With cloud storage support
+pip install -e ".[s3]"       # AWS S3
+pip install -e ".[gcs]"      # Google Cloud Storage
+pip install -e ".[azure]"    # Azure Blob Storage
+pip install -e ".[cloud]"    # All cloud providers
+
+# Install/configure LLM (choose one):
+# Option A: Ollama
 ollama pull llama2
+
+# Option B: LM Studio
+# Download from lmstudio.ai, load a model
 
 # Configure
 cp examples/.env.example .env
@@ -294,13 +355,9 @@ sudo systemctl start doctagger
 - Dockerfile could be added for containerization
 - docker-compose for full stack deployment
 
-## Future Enhancements (Not Required)
+## Future Enhancements (Not Yet Implemented)
 
 Potential improvements for future versions:
-- Batch processing API
-- Custom LLM prompts UI
-- Plugin system for extensibility
-- Cloud storage support (S3, Google Drive)
 - Electron/Tauri desktop app
 - Mobile app
 - Multi-language UI
@@ -308,6 +365,14 @@ Potential improvements for future versions:
 - Document preview
 - Scheduled processing
 - Email integration
+- Docker containerization
+
+**Recently Completed (Extended Roadmap):**
+- ✅ Batch processing API
+- ✅ Custom LLM prompts UI
+- ✅ Plugin system for extensibility
+- ✅ Cloud storage support (S3, GCS, Azure)
+- ✅ OpenAI-compatible LLM support (LM Studio, vLLM)
 
 ## Performance
 
@@ -350,12 +415,15 @@ MIT License - See LICENSE file
 DocTagger is a complete, production-ready solution for automated PDF document organization using local LLM technology. The implementation meets all requirements with:
 
 ✅ Robust Python core library
-✅ User-friendly CLI
-✅ RESTful API server
+✅ User-friendly CLI (with batch processing)
+✅ RESTful API server (with custom prompts API)
 ✅ Modern React frontend
 ✅ Comprehensive testing
 ✅ Security scanning passed
 ✅ Extensive documentation
 ✅ Example configurations
+✅ **Multi-provider LLM support** (Ollama + OpenAI-compatible)
+✅ **Extensible plugin system**
+✅ **Cloud storage backends** (S3, GCS, Azure)
 
-The system is ready to use and can be extended as needed.
+The system is ready to use and can be extended via the plugin architecture.

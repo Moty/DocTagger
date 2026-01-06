@@ -1,15 +1,57 @@
 """Configuration management for DocTagger."""
 
 import os
+from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class LLMProvider(str, Enum):
+    """Supported LLM providers."""
+
+    OLLAMA = "ollama"
+    OPENAI = "openai"  # OpenAI-compatible APIs (LM Studio, vLLM, etc.)
+
+
+class LLMSettings(BaseSettings):
+    """LLM settings supporting multiple providers."""
+
+    # Provider selection
+    provider: LLMProvider = Field(
+        default=LLMProvider.OPENAI,
+        description="LLM provider: 'ollama' or 'openai' (for OpenAI-compatible APIs like LM Studio)",
+    )
+
+    # Common settings
+    model: str = Field(default="zai-org/glm-4.6v-flash", description="Model to use for tagging")
+    timeout: int = Field(default=60, description="Request timeout in seconds")
+    temperature: float = Field(default=0.1, description="Temperature for generation")
+    max_tokens: int = Field(default=500, description="Maximum tokens in response")
+
+    # Ollama-specific
+    ollama_url: str = Field(
+        default="http://localhost:11434", description="Ollama API URL"
+    )
+
+    # OpenAI-compatible settings (LM Studio, vLLM, etc.)
+    openai_base_url: str = Field(
+        default="http://localhost:1234/v1",
+        description="OpenAI-compatible API base URL (LM Studio default: http://localhost:1234/v1)",
+    )
+    openai_api_key: str = Field(
+        default="lm-studio",
+        description="API key (use 'lm-studio' for LM Studio, or your actual key for OpenAI)",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="LLM_")
+
+
+# Keep OllamaSettings as an alias for backward compatibility
 class OllamaSettings(BaseSettings):
-    """Ollama LLM settings."""
+    """Ollama LLM settings (deprecated, use LLMSettings instead)."""
 
     url: str = Field(default="http://localhost:11434", description="Ollama API URL")
     model: str = Field(default="llama2", description="Model to use for tagging")
@@ -81,7 +123,8 @@ class Config(BaseSettings):
     )
 
     # Sub-configurations
-    ollama: OllamaSettings = Field(default_factory=OllamaSettings)
+    llm: LLMSettings = Field(default_factory=LLMSettings)
+    ollama: OllamaSettings = Field(default_factory=OllamaSettings)  # Deprecated
     ocr: OCRSettings = Field(default_factory=OCRSettings)
     tags: TagsSettings = Field(default_factory=TagsSettings)
     macos_tags: MacOSTagsSettings = Field(default_factory=MacOSTagsSettings)
