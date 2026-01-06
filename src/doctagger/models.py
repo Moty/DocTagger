@@ -71,6 +71,7 @@ class ProcessingResult(BaseModel):
     error: Optional[str] = None
     processing_time: float = 0.0
     timestamp: datetime = Field(default_factory=datetime.now)
+    content_hash: Optional[str] = Field(None, description="SHA-256 hash of file content for deduplication")
 
     model_config = ConfigDict(
         json_encoders={

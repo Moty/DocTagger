@@ -81,6 +81,7 @@ class FileOrganizer:
                 "ocr_applied": result.ocr_applied,
                 "processing_time": result.processing_time,
                 "timestamp": result.timestamp.isoformat(),
+                "content_hash": result.content_hash,
                 "metadata": result.metadata.dict() if result.metadata else None,
                 "tagging": result.tagging.dict() if result.tagging else None,
                 "error": result.error,
