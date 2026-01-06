@@ -221,7 +221,10 @@ Respond ONLY with valid JSON, no additional text."""
                         "role": "system",
                         "content": "You are a document analysis assistant. Always respond with valid JSON only.",
                     },
-                    {"role": "user", "content": prompt},
+                    {
+                        "role": "user",
+                        "content": prompt + "\n\nRespond with JSON only, no code fences or extra text.",
+                    },
                 ],
                 temperature=self.config.llm.temperature,
                 max_tokens=self.config.llm.max_tokens,

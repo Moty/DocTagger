@@ -415,7 +415,7 @@ async def list_inbox_files(skip_processed: bool = True) -> dict:
         if not watcher:
             watcher = FolderWatcher(config)
         
-        files = watcher.batch_processor.scan_files(skip_processed=False)
+        files = watcher.batch_processor.scan_files(skip_processed=skip_processed)
         
         return {
             "files": files,

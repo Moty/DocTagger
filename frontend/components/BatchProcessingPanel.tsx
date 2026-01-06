@@ -35,25 +35,22 @@ export function BatchProcessingPanel() {
     }
   }, []);
 
-  // Poll for updates when processing is active
+  // Poll for updates so progress + file list stay in sync
   useEffect(() => {
     fetchData();
 
     const interval = setInterval(async () => {
-      // Always poll to catch status changes
       try {
-        const progressData = await api.getBatchProgress();
+        const [progressData, filesData] = await Promise.all([
+          api.getBatchProgress(),
+          api.listInboxFiles(),
+        ]);
+
         setProgress(progressData);
-        
-        // Update polling status
+        setFiles(filesData.files);
+
         const shouldPoll = progressData.status === "running" || progressData.status === "paused" || progressData.status === "stopping";
         isPollingRef.current = shouldPoll;
-        
-        // If completed or cancelled, also refresh file list
-        if (progressData.status === "completed" || progressData.status === "cancelled") {
-          const filesData = await api.listInboxFiles();
-          setFiles(filesData.files);
-        }
       } catch (err) {
         console.error("Polling error:", err);
       }
