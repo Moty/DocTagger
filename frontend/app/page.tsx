@@ -1,6 +1,7 @@
 import { StatusCard } from "@/components/StatusCard";
 import { FileUpload } from "@/components/FileUpload";
 import { DocumentList } from "@/components/DocumentList";
+import { BatchProcessingPanel } from "@/components/BatchProcessingPanel";
 
 export default function Home() {
   return (
@@ -22,6 +23,11 @@ export default function Home() {
           <div className="lg:col-span-2">
             <FileUpload />
           </div>
+        </div>
+
+        {/* Batch Processing Panel */}
+        <div className="mb-8">
+          <BatchProcessingPanel />
         </div>
 
         <div>

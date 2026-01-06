@@ -124,8 +124,43 @@ export interface WebSocketMessage {
     archive_path: string | null;
   };
 }
-    document_type: string | null;
-    tags: string[];
-    archive_path: string | null;
+
+// Inbox batch processing types
+export type BatchProcessingStatus = 
+  | "idle"
+  | "running"
+  | "paused"
+  | "stopping"
+  | "completed"
+  | "cancelled";
+
+export interface InboxFile {
+  name: string;
+  path: string;
+  size: number;
+  modified: string;
+  status: "pending" | "already_processed";
+}
+
+export interface ProcessedFile {
+  name: string;
+  status: "success" | "failed" | "skipped";
+  error?: string;
+  result?: {
+    title?: string;
+    document_type?: string;
+    tags?: string[];
   };
+}
+
+export interface BatchProgress {
+  status: BatchProcessingStatus;
+  total_files: number;
+  processed: number;
+  skipped: number;
+  failed: number;
+  current_file: string | null;
+  percent_complete: number;
+  files_to_process: InboxFile[];
+  processed_files: ProcessedFile[];
 }

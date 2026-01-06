@@ -1,9 +1,11 @@
 """Folder watcher for monitoring inbox."""
 
 import logging
+import threading
 import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Dict, List, Optional, Any
+from enum import Enum
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -12,6 +14,211 @@ from .config import Config, get_config
 from .processor import DocumentProcessor
 
 logger = logging.getLogger(__name__)
+
+
+class BatchProcessingStatus(str, Enum):
+    """Status of batch processing job."""
+    IDLE = "idle"
+    RUNNING = "running"
+    PAUSED = "paused"
+    STOPPING = "stopping"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class BatchProcessor:
+    """Manages batch processing of existing files with progress tracking."""
+
+    def __init__(self, watcher: "FolderWatcher"):
+        self.watcher = watcher
+        self.status = BatchProcessingStatus.IDLE
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._pause_event = threading.Event()
+        self._pause_event.set()  # Not paused by default
+
+        # Progress tracking
+        self.total_files = 0
+        self.processed_count = 0
+        self.skipped_count = 0
+        self.failed_count = 0
+        self.current_file = ""
+        self.files_to_process: List[Dict[str, Any]] = []
+        self.processed_files: List[Dict[str, Any]] = []
+
+    def get_progress(self) -> Dict[str, Any]:
+        """Get current progress of batch processing."""
+        with self._lock:
+            total_done = self.processed_count + self.skipped_count + self.failed_count
+            return {
+                "status": self.status.value,
+                "total_files": self.total_files,
+                "processed": self.processed_count,
+                "skipped": self.skipped_count,
+                "failed": self.failed_count,
+                "current_file": self.current_file if self.current_file else None,
+                "percent_complete": round(total_done / max(self.total_files, 1) * 100, 1),
+                "files_to_process": [
+                    {
+                        "name": f["name"],
+                        "path": f["path"],
+                        "size": f["size"],
+                        "modified": "",
+                        "status": f["status"],
+                    }
+                    for f in self.files_to_process
+                ],
+                "processed_files": [
+                    {
+                        "name": f["name"],
+                        "status": "success" if f.get("status") == "completed" else ("failed" if f.get("status") == "failed" else "skipped"),
+                        "error": f.get("error"),
+                        "result": f.get("result"),
+                    }
+                    for f in self.processed_files
+                ],
+            }
+
+    def scan_files(self, skip_processed: bool = True) -> List[Dict[str, Any]]:
+        """Scan inbox for files and categorize them."""
+        inbox = self.watcher.config.inbox_folder
+        pdf_files = list(inbox.glob("*.pdf"))
+
+        files = []
+        for pdf_file in pdf_files:
+            is_processed = self.watcher.is_already_processed(pdf_file) if skip_processed else False
+            stat = pdf_file.stat()
+            files.append({
+                "name": pdf_file.name,
+                "path": str(pdf_file),
+                "size": stat.st_size,
+                "modified": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(stat.st_mtime)),
+                "status": "already_processed" if is_processed else "pending",
+            })
+
+        return files
+
+    def start(self, skip_processed: bool = True) -> bool:
+        """Start batch processing."""
+        with self._lock:
+            if self.status == BatchProcessingStatus.RUNNING:
+                return False
+
+            # Reset state
+            self._stop_event.clear()
+            self._pause_event.set()
+            self.status = BatchProcessingStatus.RUNNING
+            self.processed_count = 0
+            self.failed_count = 0
+            self.skipped_count = 0
+            self.current_file = ""
+            self.processed_files = []
+
+            # Scan files
+            all_files = self.scan_files(skip_processed)
+            self.files_to_process = [f for f in all_files if f["status"] == "pending"]
+            self.skipped_count = len([f for f in all_files if f["status"] == "already_processed"])
+            self.total_files = len(all_files)
+
+        # Start processing thread
+        thread = threading.Thread(target=self._process_files, daemon=True)
+        thread.start()
+        return True
+
+    def pause(self) -> bool:
+        """Pause batch processing."""
+        with self._lock:
+            if self.status != BatchProcessingStatus.RUNNING:
+                return False
+            self._pause_event.clear()
+            self.status = BatchProcessingStatus.PAUSED
+        return True
+
+    def resume(self) -> bool:
+        """Resume batch processing."""
+        with self._lock:
+            if self.status != BatchProcessingStatus.PAUSED:
+                return False
+            self._pause_event.set()
+            self.status = BatchProcessingStatus.RUNNING
+        return True
+
+    def stop(self) -> bool:
+        """Stop batch processing."""
+        with self._lock:
+            if self.status not in (BatchProcessingStatus.RUNNING, BatchProcessingStatus.PAUSED):
+                return False
+            self.status = BatchProcessingStatus.STOPPING
+            self._stop_event.set()
+            self._pause_event.set()  # Unpause to allow thread to exit
+        return True
+
+    def _process_files(self):
+        """Background thread for processing files."""
+        try:
+            for file_info in self.files_to_process:
+                # Check for stop signal
+                if self._stop_event.is_set():
+                    with self._lock:
+                        self.status = BatchProcessingStatus.CANCELLED
+                    logger.info("Batch processing cancelled")
+                    return
+
+                # Wait if paused
+                self._pause_event.wait()
+
+                # Check stop again after unpause
+                if self._stop_event.is_set():
+                    with self._lock:
+                        self.status = BatchProcessingStatus.CANCELLED
+                    return
+
+                pdf_path = Path(file_info["path"])
+
+                with self._lock:
+                    self.current_file = file_info["name"]
+                    file_info["status"] = "processing"
+
+                try:
+                    logger.info(f"Batch processing: {pdf_path.name}")
+                    result = self.watcher.processor.process(pdf_path)
+
+                    with self._lock:
+                        if result.status.value == "completed":
+                            self.processed_count += 1
+                            file_info["status"] = "completed"
+                            file_info["result"] = {
+                                "title": result.tagging.title if result.tagging else None,
+                                "document_type": result.tagging.document_type if result.tagging else None,
+                                "tags": result.tagging.tags if result.tagging else [],
+                            }
+                        elif result.status.value == "skipped":
+                            self.skipped_count += 1
+                            file_info["status"] = "skipped"
+                        else:
+                            self.failed_count += 1
+                            file_info["status"] = "failed"
+                            file_info["error"] = result.error
+                        self.processed_files.append(file_info.copy())
+                        logger.info(f"Progress: {self.processed_count}/{self.total_files} processed, {self.failed_count} failed")
+
+                except Exception as e:
+                    logger.error(f"Error processing {pdf_path.name}: {e}")
+                    with self._lock:
+                        self.failed_count += 1
+                        file_info["status"] = "failed"
+                        file_info["error"] = str(e)
+                        self.processed_files.append(file_info.copy())
+
+            with self._lock:
+                self.status = BatchProcessingStatus.COMPLETED
+                self.current_file = ""
+            logger.info(f"Batch processing completed: {self.processed_count} processed, {self.failed_count} failed, {self.skipped_count} skipped")
+
+        except Exception as e:
+            logger.error(f"Batch processing error: {e}", exc_info=True)
+            with self._lock:
+                self.status = BatchProcessingStatus.IDLE
 
 
 class PDFHandler(FileSystemEventHandler):
@@ -106,6 +313,8 @@ class FolderWatcher:
         self.processor = DocumentProcessor(self.config)
         self.observer: Optional[Observer] = None
         self._running = False
+        # Batch processor for handling existing files
+        self.batch_processor = BatchProcessor(self)
 
     def start(self, blocking: bool = True) -> None:
         """
@@ -167,12 +376,46 @@ class FolderWatcher:
         """Check if watcher is running."""
         return self._running
 
-    def process_existing(self) -> int:
+    def is_already_processed(self, pdf_path: Path) -> bool:
+        """
+        Check if a PDF has already been processed.
+
+        A file is considered processed if:
+        1. A sidecar JSON exists next to it, OR
+        2. A file with same name exists in the archive folder
+
+        Args:
+            pdf_path: Path to the PDF file
+
+        Returns:
+            True if already processed, False otherwise
+        """
+        # Check for sidecar JSON file
+        sidecar_path = pdf_path.with_suffix(".pdf.json")
+        if sidecar_path.exists():
+            logger.debug(f"Sidecar exists for {pdf_path.name}, skipping")
+            return True
+
+        # Check if file exists in archive (check all subdirectories)
+        archive = self.config.archive_folder
+        if archive.exists():
+            # Search archive for file with same name
+            for archived_file in archive.rglob(pdf_path.name):
+                if archived_file.is_file():
+                    logger.debug(f"File {pdf_path.name} already in archive, skipping")
+                    return True
+
+        return False
+
+    def process_existing(self, skip_processed: bool = True) -> dict:
         """
         Process all existing PDF files in the inbox.
 
+        Args:
+            skip_processed: If True, skip files that have already been processed
+
         Returns:
-            Number of files processed
+            Dict with counts: total, processed, skipped, failed
         """
         inbox = self.config.inbox_folder
 
@@ -182,21 +425,39 @@ class FolderWatcher:
         pdf_files = list(inbox.glob("*.pdf"))
         logger.info(f"Found {len(pdf_files)} existing PDF files")
 
-        processed_count = 0
+        stats = {
+            "total": len(pdf_files),
+            "processed": 0,
+            "skipped": 0,
+            "failed": 0,
+            "files": []
+        }
 
         for pdf_file in pdf_files:
+            # Check if already processed
+            if skip_processed and self.is_already_processed(pdf_file):
+                logger.info(f"Skipping already processed: {pdf_file.name}")
+                stats["skipped"] += 1
+                stats["files"].append({"name": pdf_file.name, "status": "skipped"})
+                continue
+
             try:
                 logger.info(f"Processing existing file: {pdf_file.name}")
                 result = self.processor.process(pdf_file)
 
                 if result.status.value == "completed":
-                    processed_count += 1
+                    stats["processed"] += 1
+                    stats["files"].append({"name": pdf_file.name, "status": "completed"})
                     logger.info(f"Successfully processed: {pdf_file.name}")
                 else:
+                    stats["failed"] += 1
+                    stats["files"].append({"name": pdf_file.name, "status": "failed", "error": result.error})
                     logger.error(f"Failed to process {pdf_file.name}: {result.error}")
 
             except Exception as e:
+                stats["failed"] += 1
+                stats["files"].append({"name": pdf_file.name, "status": "failed", "error": str(e)})
                 logger.error(f"Error processing {pdf_file.name}: {e}", exc_info=True)
 
-        logger.info(f"Processed {processed_count} of {len(pdf_files)} files")
-        return processed_count
+        logger.info(f"Processed {stats['processed']}, skipped {stats['skipped']}, failed {stats['failed']} of {stats['total']} files")
+        return stats

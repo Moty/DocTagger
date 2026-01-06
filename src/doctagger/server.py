@@ -346,7 +346,192 @@ async def stop_watcher() -> dict:
         raise HTTPException(status_code=500, detail=f"Failed to stop watcher: {e}")
 
 
-# ============ Batch Processing Endpoints ============
+@app.post("/api/watcher/process-existing")
+async def process_existing_files(
+    skip_processed: bool = True,
+) -> dict:
+    """
+    Process all existing PDF files in the inbox folder.
+    
+    NOTE: This endpoint now redirects to the batch processor.
+    Use /api/inbox/batch/start for new implementations.
+
+    Args:
+        skip_processed: If True (default), skip files that have already been processed
+
+    Returns:
+        Processing stats and batch progress
+    """
+    global watcher
+
+    try:
+        # Create watcher if not exists
+        if not watcher:
+            watcher = FolderWatcher(config)
+
+        # Use the batch processor instead of the old method
+        success = watcher.batch_processor.start(skip_processed=skip_processed)
+        progress = watcher.batch_processor.get_progress()
+        
+        if success:
+            return {
+                "message": f"Started processing {progress['total_files']} files",
+                "total": progress["total_files"],
+                "to_process": progress["total_files"] - progress["skipped"],
+                "skipped": progress["skipped"],
+                "skipped_files": [],
+            }
+        else:
+            return {
+                "message": f"Batch processing already {progress['status']}",
+                "total": progress["total_files"],
+                "to_process": progress["total_files"] - progress["skipped"],
+                "skipped": progress["skipped"],
+                "skipped_files": [],
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to process existing files: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to process existing files: {e}")
+
+
+# ============ Inbox Batch Processing Endpoints ============
+
+
+@app.get("/api/inbox/files")
+async def list_inbox_files(skip_processed: bool = True) -> dict:
+    """
+    List all PDF files in the inbox folder with their processing status.
+    
+    Args:
+        skip_processed: If True, mark already processed files in the response
+        
+    Returns:
+        List of files with status information
+    """
+    global watcher
+    
+    try:
+        if not watcher:
+            watcher = FolderWatcher(config)
+        
+        files = watcher.batch_processor.scan_files(skip_processed=False)
+        
+        return {
+            "files": files,
+            "total": len(files),
+            "pending": len([f for f in files if f["status"] == "pending"]),
+            "processed": len([f for f in files if f["status"] == "already_processed"]),
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to list inbox files: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/inbox/batch/progress")
+async def get_batch_progress() -> dict:
+    """Get current batch processing progress."""
+    global watcher
+    
+    if not watcher:
+        return {
+            "status": "idle",
+            "total_files": 0,
+            "processed": 0,
+            "skipped": 0,
+            "failed": 0,
+            "current_file": None,
+            "percent_complete": 0,
+            "files_to_process": [],
+            "processed_files": [],
+        }
+    
+    return watcher.batch_processor.get_progress()
+
+
+@app.post("/api/inbox/batch/start")
+async def start_batch_processing(skip_processed: bool = True) -> dict:
+    """
+    Start batch processing of inbox files.
+    
+    Args:
+        skip_processed: If True, skip already processed files
+    """
+    global watcher
+    
+    try:
+        if not watcher:
+            watcher = FolderWatcher(config)
+        
+        success = watcher.batch_processor.start(skip_processed=skip_processed)
+        
+        if success:
+            return {
+                "message": "Batch processing started",
+                "progress": watcher.batch_processor.get_progress(),
+            }
+        else:
+            progress = watcher.batch_processor.get_progress()
+            return {
+                "message": f"Cannot start: batch is currently {progress['status']}",
+                "progress": progress,
+            }
+            
+    except Exception as e:
+        logger.error(f"Failed to start batch processing: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/inbox/batch/pause")
+async def pause_batch_processing() -> dict:
+    """Pause the current batch processing."""
+    global watcher
+    
+    if not watcher:
+        raise HTTPException(status_code=400, detail="Watcher not initialized")
+    
+    success = watcher.batch_processor.pause()
+    
+    return {
+        "success": success,
+        "progress": watcher.batch_processor.get_progress(),
+    }
+
+
+@app.post("/api/inbox/batch/resume")
+async def resume_batch_processing() -> dict:
+    """Resume paused batch processing."""
+    global watcher
+    
+    if not watcher:
+        raise HTTPException(status_code=400, detail="Watcher not initialized")
+    
+    success = watcher.batch_processor.resume()
+    
+    return {
+        "success": success,
+        "progress": watcher.batch_processor.get_progress(),
+    }
+
+
+@app.post("/api/inbox/batch/stop")
+async def stop_batch_processing() -> dict:
+    """Stop the current batch processing."""
+    global watcher
+    
+    if not watcher:
+        raise HTTPException(status_code=400, detail="Watcher not initialized")
+    
+    success = watcher.batch_processor.stop()
+    
+    return {
+        "success": success,
+        "progress": watcher.batch_processor.get_progress(),
+    }
+
+
+# ============ Batch Upload Processing Endpoints ============
 
 
 @app.post("/api/batch/upload", response_model=BatchUploadResponse)

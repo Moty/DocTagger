@@ -9,6 +9,8 @@ import type {
   BatchUploadResponse,
   BatchStatusResponse,
   CustomPrompt,
+  InboxFile,
+  BatchProgress,
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -98,6 +100,28 @@ export class DocTaggerAPI {
     return response.json();
   }
 
+  async processExisting(skipProcessed: boolean = true): Promise<{
+    message: string;
+    total: number;
+    to_process: number;
+    skipped: number;
+    skipped_files: string[];
+  }> {
+    const response = await fetch(
+      `${this.baseUrl}/api/watcher/process-existing?skip_processed=${skipProcessed}`,
+      {
+        method: "POST",
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Failed to process existing files");
+    }
+
+    return response.json();
+  }
+
   async uploadBatch(files: File[]): Promise<BatchUploadResponse> {
     const formData = new FormData();
     files.forEach((file) => {
@@ -124,6 +148,86 @@ export class DocTaggerAPI {
       throw new Error("Failed to fetch batch status");
     }
 
+    return response.json();
+  }
+
+  // ============ Inbox Batch Processing ============
+
+  async listInboxFiles(): Promise<{
+    files: InboxFile[];
+    total: number;
+    pending: number;
+    processed: number;
+  }> {
+    const response = await fetch(`${this.baseUrl}/api/inbox/files`);
+    if (!response.ok) {
+      throw new Error("Failed to list inbox files");
+    }
+    return response.json();
+  }
+
+  async getBatchProgress(): Promise<BatchProgress> {
+    const response = await fetch(`${this.baseUrl}/api/inbox/batch/progress`);
+    if (!response.ok) {
+      throw new Error("Failed to get batch progress");
+    }
+    return response.json();
+  }
+
+  async startBatchProcessing(skipProcessed: boolean = true): Promise<{
+    message: string;
+    progress: BatchProgress;
+  }> {
+    const response = await fetch(
+      `${this.baseUrl}/api/inbox/batch/start?skip_processed=${skipProcessed}`,
+      { method: "POST" }
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Failed to start batch processing");
+    }
+    return response.json();
+  }
+
+  async pauseBatchProcessing(): Promise<{
+    success: boolean;
+    progress: BatchProgress;
+  }> {
+    const response = await fetch(`${this.baseUrl}/api/inbox/batch/pause`, {
+      method: "POST",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Failed to pause batch processing");
+    }
+    return response.json();
+  }
+
+  async resumeBatchProcessing(): Promise<{
+    success: boolean;
+    progress: BatchProgress;
+  }> {
+    const response = await fetch(`${this.baseUrl}/api/inbox/batch/resume`, {
+      method: "POST",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Failed to resume batch processing");
+    }
+    return response.json();
+  }
+
+  async stopBatchProcessing(): Promise<{
+    success: boolean;
+    progress: BatchProgress;
+  }> {
+    const response = await fetch(`${this.baseUrl}/api/inbox/batch/stop`, {
+      method: "POST",
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Failed to stop batch processing");
+    }
     return response.json();
   }
 

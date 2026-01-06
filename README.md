@@ -67,6 +67,8 @@ doctagger-server
 
 # Server will be available at http://localhost:8000
 # API docs at http://localhost:8000/docs
+
+RUN: source .venv/bin/activate && npm run dev
 ```
 
 ## Configuration
@@ -152,6 +154,7 @@ mypy src/
 When running the server, visit `http://localhost:8000/docs` for interactive API documentation.
 
 Key endpoints:
+
 - `POST /api/process` - Process a single document
 - `GET /api/status` - Get processing status
 - `GET /api/documents` - List processed documents
@@ -167,15 +170,15 @@ Contributions welcome! Please read our contributing guidelines first.
 
 ## Roadmap
 
-- [x] Core PDF processing pipeline
-- [x] CLI interface
-- [x] FastAPI server
-- [x] React frontend (Next.js with TypeScript)
-- [x] Batch processing (CLI and API)
-- [x] Custom LLM prompts
-- [x] Plugin system
-- [x] Cloud storage support (S3, GCS, Azure)
-- [x] OpenAI-compatible LLM support (LM Studio, etc.)
+- [X] Core PDF processing pipeline
+- [X] CLI interface
+- [X] FastAPI server
+- [X] React frontend (Next.js with TypeScript)
+- [X] Batch processing (CLI and API)
+- [X] Custom LLM prompts
+- [X] Plugin system
+- [X] Cloud storage support (S3, GCS, Azure)
+- [X] OpenAI-compatible LLM support (LM Studio, etc.)
 
 ## Cloud Storage
 
