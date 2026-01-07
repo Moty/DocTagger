@@ -228,6 +228,7 @@ Respond ONLY with valid JSON, no additional text."""
                 ],
                 temperature=self.config.llm.temperature,
                 max_tokens=self.config.llm.max_tokens,
+                response_format={"type": "text"},
             )
             return response.choices[0].message.content or ""
         except Exception as e:

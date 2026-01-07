@@ -451,21 +451,28 @@ async def get_batch_progress() -> dict:
 
 
 @app.post("/api/inbox/batch/start")
-async def start_batch_processing(skip_processed: bool = True) -> dict:
+async def start_batch_processing(
+    skip_processed: bool = True,
+    force_reprocess: bool = False
+) -> dict:
     """
     Start batch processing of inbox files.
-    
+
     Args:
         skip_processed: If True, skip already processed files
+        force_reprocess: If True, force reprocessing of all files (disables deduplication)
     """
     global watcher
-    
+
     try:
         if not watcher:
             watcher = FolderWatcher(config)
-        
-        success = watcher.batch_processor.start(skip_processed=skip_processed)
-        
+
+        success = watcher.batch_processor.start(
+            skip_processed=skip_processed,
+            force_reprocess=force_reprocess
+        )
+
         if success:
             return {
                 "message": "Batch processing started",
@@ -477,7 +484,7 @@ async def start_batch_processing(skip_processed: bool = True) -> dict:
                 "message": f"Cannot start: batch is currently {progress['status']}",
                 "progress": progress,
             }
-            
+
     except Exception as e:
         logger.error(f"Failed to start batch processing: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

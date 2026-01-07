@@ -12,6 +12,7 @@ from watchdog.observers import Observer
 
 from .config import Config, get_config
 from .processor import DocumentProcessor
+from .utils import calculate_file_hash, find_duplicate_by_hash
 
 logger = logging.getLogger(__name__)
 
@@ -79,14 +80,25 @@ class BatchProcessor:
                 ],
             }
 
-    def scan_files(self, skip_processed: bool = True) -> List[Dict[str, Any]]:
-        """Scan inbox for files and categorize them."""
+    def scan_files(self, skip_processed: bool = True, check_content_duplicates: bool = True) -> List[Dict[str, Any]]:
+        """
+        Scan inbox for files and categorize them.
+
+        Args:
+            skip_processed: Skip files that have already been processed
+            check_content_duplicates: Check for content-based duplicates (slower but catches renamed duplicates)
+
+        Returns:
+            List of file info dicts with status
+        """
         inbox = self.watcher.config.inbox_folder
         pdf_files = list(inbox.glob("*.pdf"))
 
         files = []
         for pdf_file in pdf_files:
-            is_processed = self.watcher.is_already_processed(pdf_file) if skip_processed else False
+            is_processed = self.watcher.is_already_processed(
+                pdf_file, check_content=check_content_duplicates
+            ) if skip_processed else False
             stat = pdf_file.stat()
             files.append({
                 "name": pdf_file.name,
@@ -98,8 +110,17 @@ class BatchProcessor:
 
         return files
 
-    def start(self, skip_processed: bool = True) -> bool:
-        """Start batch processing."""
+    def start(self, skip_processed: bool = True, force_reprocess: bool = False) -> bool:
+        """
+        Start batch processing.
+
+        Args:
+            skip_processed: Skip files that have been processed before
+            force_reprocess: Force reprocessing of all files (disables deduplication)
+
+        Returns:
+            True if batch started, False if already running
+        """
         with self._lock:
             if self.status == BatchProcessingStatus.RUNNING:
                 return False
@@ -115,7 +136,13 @@ class BatchProcessor:
             self.processed_files = []
 
             # Scan files
-            all_files = self.scan_files(skip_processed)
+            # When force_reprocess=True, we set skip_processed=False to process everything
+            # and disable content duplicate checking
+            check_content = not force_reprocess
+            all_files = self.scan_files(
+                skip_processed=skip_processed and not force_reprocess,
+                check_content_duplicates=check_content
+            )
             self.files_to_process = [f for f in all_files if f["status"] == "pending"]
             self.skipped_count = len([f for f in all_files if f["status"] == "already_processed"])
             self.total_files = len(all_files)
@@ -376,16 +403,18 @@ class FolderWatcher:
         """Check if watcher is running."""
         return self._running
 
-    def is_already_processed(self, pdf_path: Path) -> bool:
+    def is_already_processed(self, pdf_path: Path, check_content: bool = True) -> bool:
         """
         Check if a PDF has already been processed.
 
         A file is considered processed if:
         1. A sidecar JSON exists next to it, OR
-        2. A file with same name exists in the archive folder
+        2. A file with same name exists in the archive folder, OR
+        3. (if check_content=True) A file with same content hash exists anywhere
 
         Args:
             pdf_path: Path to the PDF file
+            check_content: If True, also check for content-based duplicates
 
         Returns:
             True if already processed, False otherwise
@@ -404,6 +433,24 @@ class FolderWatcher:
                 if archived_file.is_file():
                     logger.debug(f"File {pdf_path.name} already in archive, skipping")
                     return True
+
+        # Check for content-based duplicates
+        if check_content:
+            try:
+                file_hash = calculate_file_hash(pdf_path)
+                # Search inbox and archive for duplicates
+                search_dirs = [self.config.inbox_folder]
+                if archive.exists():
+                    search_dirs.append(archive)
+
+                duplicate = find_duplicate_by_hash(file_hash, search_dirs, exclude_path=pdf_path)
+                if duplicate:
+                    logger.info(
+                        f"Content duplicate detected: {pdf_path.name} has same content as {duplicate.name}"
+                    )
+                    return True
+            except Exception as e:
+                logger.warning(f"Failed to check content duplicate for {pdf_path.name}: {e}")
 
         return False
 

@@ -13,6 +13,7 @@ from .models import DocumentMetadata, ProcessingResult, ProcessingStatus, Taggin
 from .normalizer import Normalizer
 from .ocr import OCRProcessor
 from .organizer import FileOrganizer
+from .utils import calculate_file_hash
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class DocumentProcessor:
         pdf_path: Path,
         skip_ocr: bool = False,
         skip_archive: bool = False,
+        force_reprocess: bool = False,
     ) -> ProcessingResult:
         """
         Process a single PDF document.
@@ -43,6 +45,7 @@ class DocumentProcessor:
             pdf_path: Path to the PDF file
             skip_ocr: Skip OCR processing
             skip_archive: Skip archiving (keep in original location)
+            force_reprocess: Force reprocessing even if already processed (ignores deduplication)
 
         Returns:
             ProcessingResult with processing details
@@ -52,9 +55,17 @@ class DocumentProcessor:
 
         logger.info(f"Starting processing: {pdf_path.name}")
 
+        # Calculate content hash for deduplication
+        try:
+            content_hash = calculate_file_hash(original_path)
+        except Exception as e:
+            logger.warning(f"Failed to calculate file hash: {e}")
+            content_hash = None
+
         result = ProcessingResult(
             status=ProcessingStatus.PROCESSING,
             original_path=original_path,
+            content_hash=content_hash,
         )
 
         try:
