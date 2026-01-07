@@ -1,6 +1,6 @@
 import { StatusCard } from "@/components/StatusCard";
 import { FileUpload } from "@/components/FileUpload";
-import { DocumentList } from "@/components/DocumentList";
+import { DocumentListExplorer } from "@/components/DocumentListExplorer";
 import { BatchProcessingPanel } from "@/components/BatchProcessingPanel";
 
 export default function Home() {
@@ -31,7 +31,7 @@ export default function Home() {
         </div>
 
         <div>
-          <DocumentList />
+          <DocumentListExplorer />
         </div>
 
         <footer className="mt-12 text-center text-sm text-gray-500 dark:text-gray-400">

@@ -56,7 +56,7 @@ Provide a JSON response with the following fields:
 - date: Any date mentioned in the document (format: YYYY-MM-DD) or null
 - confidence: Your confidence in this classification (0.0 to 1.0)
 
-Respond ONLY with valid JSON, no additional text."""
+IMPORTANT: Respond ONLY with the raw JSON object. Do NOT wrap it in markdown code fences (```). Do NOT include any text before or after the JSON."""
 
     def create_prompt(
         self, text: str, max_chars: int = 8000, custom_template: Optional[str] = None
@@ -102,7 +102,7 @@ Provide a JSON response with the following fields:
 - date: Any date mentioned in the document (format: YYYY-MM-DD) or null
 - confidence: Your confidence in this classification (0.0 to 1.0)
 
-Respond ONLY with valid JSON, no additional text."""
+IMPORTANT: Respond ONLY with the raw JSON object. Do NOT wrap it in markdown code fences (```). Do NOT include any text before or after the JSON."""
 
         return prompt
 
@@ -120,25 +120,60 @@ Respond ONLY with valid JSON, no additional text."""
             ValueError: If response cannot be parsed
         """
         try:
+            # Clean up the response text
+            cleaned = response_text.strip()
+            
+            # Remove markdown code fences if present (```json ... ``` or ``` ... ```)
+            import re
+            # Match ```json or ``` at start and ``` at end
+            code_fence_pattern = r'^```(?:json)?\s*\n?(.*?)\n?```\s*$'
+            match = re.match(code_fence_pattern, cleaned, re.DOTALL | re.IGNORECASE)
+            if match:
+                cleaned = match.group(1).strip()
+            
+            # Also handle case where there's text before/after code fences
+            if '```' in cleaned:
+                # Extract content between first ``` and last ```
+                fence_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', cleaned, re.DOTALL | re.IGNORECASE)
+                if fence_match:
+                    cleaned = fence_match.group(1).strip()
+            
             # Try to find JSON in the response
             # Sometimes LLMs add extra text around the JSON
-            start_idx = response_text.find("{")
-            end_idx = response_text.rfind("}") + 1
+            start_idx = cleaned.find("{")
+            end_idx = cleaned.rfind("}") + 1
 
             if start_idx == -1 or end_idx == 0:
+                logger.error(f"No JSON object found in response: {response_text[:500]}")
                 raise ValueError("No JSON found in response")
 
-            json_str = response_text[start_idx:end_idx]
-            data = json.loads(json_str)
+            json_str = cleaned[start_idx:end_idx]
+            
+            # Try to parse the JSON
+            try:
+                data = json.loads(json_str)
+            except json.JSONDecodeError:
+                # Try to fix common JSON issues
+                # Remove trailing commas before } or ]
+                fixed_json = re.sub(r',\s*([}\]])', r'\1', json_str)
+                # Replace single quotes with double quotes (some LLMs do this)
+                # Only if the JSON still fails to parse
+                try:
+                    data = json.loads(fixed_json)
+                except json.JSONDecodeError:
+                    # Last resort: try replacing single quotes
+                    fixed_json = fixed_json.replace("'", '"')
+                    data = json.loads(fixed_json)
 
             return TaggingResult(**data)
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON response: {e}")
-            logger.debug(f"Response text: {response_text}")
+            logger.error(f"Response text: {response_text[:1000]}")
             raise ValueError(f"Invalid JSON response: {e}")
         except Exception as e:
             logger.error(f"Failed to create TaggingResult: {e}")
+            logger.error(f"Response text: {response_text[:1000]}")
             raise ValueError(f"Invalid response format: {e}")
 
     def tag(self, text: str) -> TaggingResult:
@@ -219,11 +254,11 @@ Respond ONLY with valid JSON, no additional text."""
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a document analysis assistant. Always respond with valid JSON only.",
+                        "content": "You are a document analysis assistant. You MUST respond with valid JSON only. Never use markdown code fences (```). Never add explanatory text before or after the JSON.",
                     },
                     {
                         "role": "user",
-                        "content": prompt + "\n\nRespond with JSON only, no code fences or extra text.",
+                        "content": prompt,
                     },
                 ],
                 temperature=self.config.llm.temperature,

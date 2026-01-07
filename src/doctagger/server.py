@@ -9,6 +9,7 @@ from uuid import uuid4
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from . import __version__
@@ -280,6 +281,8 @@ async def list_documents(limit: int = 100) -> List[DocumentListItem]:
                         title=tagging.get("title"),
                         document_type=tagging.get("document_type"),
                         tags=tagging.get("tags", []),
+                        document_date=tagging.get("date"),
+                        summary=tagging.get("summary"),
                         processed_at=data.get("timestamp"),
                         size_bytes=pdf_file.stat().st_size,
                     )
@@ -292,6 +295,8 @@ async def list_documents(limit: int = 100) -> List[DocumentListItem]:
                         title=pdf_file.stem,
                         document_type=None,
                         tags=[],
+                        document_date=None,
+                        summary=None,
                         processed_at=pdf_file.stat().st_mtime,
                         size_bytes=pdf_file.stat().st_size,
                     )
@@ -302,6 +307,42 @@ async def list_documents(limit: int = 100) -> List[DocumentListItem]:
             continue
 
     return documents
+
+
+@app.get("/api/documents/open/{document_path:path}")
+async def open_document(document_path: str) -> FileResponse:
+    """
+    Open/download a document from the archive.
+
+    Args:
+        document_path: Relative path to the document within the archive folder
+
+    Returns:
+        FileResponse with the PDF file
+    """
+    archive_folder = config.archive_folder
+    file_path = archive_folder / document_path
+
+    # Security: ensure the resolved path is within the archive folder
+    try:
+        resolved_path = file_path.resolve()
+        archive_resolved = archive_folder.resolve()
+        if not str(resolved_path).startswith(str(archive_resolved)):
+            raise HTTPException(status_code=403, detail="Access denied")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not file_path.suffix.lower() == ".pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files can be opened")
+
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        filename=file_path.name,
+    )
 
 
 @app.post("/api/watcher/start")
@@ -415,13 +456,36 @@ async def list_inbox_files(skip_processed: bool = True) -> dict:
         if not watcher:
             watcher = FolderWatcher(config)
         
-        files = watcher.batch_processor.scan_files(skip_processed=skip_processed)
-        
+        # Skip content-hash duplicate checks during listing to avoid repeated hashing/log spam
+        files = watcher.batch_processor.scan_files(
+            skip_processed=skip_processed,
+            check_content_duplicates=False,
+        )
+
+        # Overlay current batch progress statuses so UI reflects live state
+        progress = watcher.batch_processor.get_progress()
+
+        processed_lookup = {
+            f.get("name"): f.get("status") for f in progress.get("processed_files", [])
+        }
+        processing_name = progress.get("current_file")
+        queued_names = {f.get("name") for f in progress.get("files_to_process", [])}
+
+        for f in files:
+            name = f.get("name")
+            if name == processing_name:
+                f["status"] = "processing"
+            elif name in processed_lookup:
+                f["status"] = processed_lookup[name]
+            elif name in queued_names:
+                f["status"] = "pending"
+
         return {
             "files": files,
             "total": len(files),
-            "pending": len([f for f in files if f["status"] == "pending"]),
-            "processed": len([f for f in files if f["status"] == "already_processed"]),
+            "pending": len([f for f in files if f["status"] == "pending" or f["status"] == "processing"]),
+            "processed": len([f for f in files if f["status"] in ("already_processed", "success", "skipped")]),
+            "failed": len([f for f in files if f["status"] == "failed"]),
         }
         
     except Exception as e:

@@ -218,6 +218,8 @@ class BatchProcessor:
                                 "title": result.tagging.title if result.tagging else None,
                                 "document_type": result.tagging.document_type if result.tagging else None,
                                 "tags": result.tagging.tags if result.tagging else [],
+                                "date": result.tagging.date if result.tagging else None,
+                                "summary": result.tagging.summary if result.tagging else None,
                             }
                         elif result.status.value == "skipped":
                             self.skipped_count += 1

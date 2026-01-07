@@ -106,6 +106,8 @@ class DocumentListItem(BaseModel):
     title: Optional[str] = None
     document_type: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
+    document_date: Optional[str] = None  # Date extracted from document content
+    summary: Optional[str] = None
     processed_at: datetime
     size_bytes: int
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import type { BatchProgress, InboxFile } from "@/lib/types";
+import { FileExplorer } from "./FileExplorer";
 
 export function BatchProcessingPanel() {
   const [progress, setProgress] = useState<BatchProgress | null>(null);
@@ -274,9 +275,9 @@ export function BatchProcessingPanel() {
       </div>
 
       {/* File Lists */}
-      <div className="max-h-80 overflow-y-auto">
+      <div>
         {activeTab === "pending" && (
-          <div className="space-y-2">
+          <div className="max-h-80 overflow-y-auto space-y-2">
             {pendingFiles.length === 0 ? (
               <p className="text-gray-500 text-center py-4">No pending files</p>
             ) : (
@@ -301,64 +302,7 @@ export function BatchProcessingPanel() {
         )}
 
         {activeTab === "processed" && (
-          <div className="space-y-2">
-            {processedFiles.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No processed files yet</p>
-            ) : (
-              processedFiles.map((file, index) => (
-                <div
-                  key={index}
-                  className={`p-3 rounded ${
-                    file.status === "success"
-                      ? "bg-green-50"
-                      : file.status === "failed"
-                      ? "bg-red-50"
-                      : "bg-yellow-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {file.status === "success" && (
-                        <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                      {file.status === "failed" && (
-                        <svg className="w-5 h-5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                      {file.status === "skipped" && (
-                        <svg className="w-5 h-5 text-yellow-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                      <span className="text-sm text-gray-700 truncate">{file.name}</span>
-                    </div>
-                    <span
-                      className={`text-xs px-2 py-1 rounded flex-shrink-0 ml-2 ${
-                        file.status === "success"
-                          ? "bg-green-200 text-green-800"
-                          : file.status === "failed"
-                          ? "bg-red-200 text-red-800"
-                          : "bg-yellow-200 text-yellow-800"
-                      }`}
-                    >
-                      {file.status}
-                    </span>
-                  </div>
-                  {file.error && (
-                    <p className="text-xs text-red-600 mt-1 pl-7">{file.error}</p>
-                  )}
-                  {file.result?.document_type && (
-                    <p className="text-xs text-gray-600 mt-1 pl-7">
-                      Type: {file.result.document_type}
-                    </p>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+          <FileExplorer files={processedFiles} title="Processed Files" />
         )}
       </div>
     </div>

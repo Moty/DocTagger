@@ -58,6 +58,8 @@ export interface DocumentListItem {
   title: string | null;
   document_type: string | null;
   tags: string[];
+  document_date: string | null;  // Date extracted from document content (YYYY-MM-DD)
+  summary: string | null;
   processed_at: string;
   size_bytes: number;
 }
@@ -150,6 +152,8 @@ export interface ProcessedFile {
     title?: string;
     document_type?: string;
     tags?: string[];
+    date?: string;  // Date extracted from document content (YYYY-MM-DD)
+    summary?: string;
   };
 }
 

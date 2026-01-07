@@ -280,6 +280,24 @@ export class DocTaggerAPI {
     }
   }
 
+  /**
+   * Get the URL to open/download a document.
+   * @param documentPath - Relative path to the document within the archive
+   * @returns Full URL to open the document
+   */
+  getDocumentUrl(documentPath: string): string {
+    return `${this.baseUrl}/api/documents/open/${encodeURIComponent(documentPath)}`;
+  }
+
+  /**
+   * Open a document in a new browser tab.
+   * @param documentPath - Relative path to the document within the archive
+   */
+  openDocument(documentPath: string): void {
+    const url = this.getDocumentUrl(documentPath);
+    window.open(url, '_blank');
+  }
+
   createWebSocket(
     onMessage: (message: WebSocketMessage) => void,
     onError?: (error: Event) => void
