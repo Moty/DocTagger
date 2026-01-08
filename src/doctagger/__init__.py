@@ -7,6 +7,7 @@ Supports multiple LLM providers:
 Features:
 - PDF processing with OCR
 - Intelligent tagging via LLM
+- Document embeddings for RAG/semantic search
 - Batch processing
 - Plugin system for extensibility
 - Cloud storage support (S3, GCS, Azure)
@@ -24,7 +25,7 @@ from .models import (
     BatchStatusResponse,
     CustomPrompt,
 )
-from .config import Config, LLMSettings, LLMProvider
+from .config import Config, LLMSettings, LLMProvider, EmbeddingSettings
 
 __all__ = [
     # Models
@@ -38,4 +39,5 @@ __all__ = [
     "Config",
     "LLMSettings",
     "LLMProvider",
+    "EmbeddingSettings",
 ]

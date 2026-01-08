@@ -96,6 +96,42 @@ class DocumentProcessor:
             tagging: TaggingResult = self.llm_tagger.tag(text)
             result.tagging = tagging
 
+            # Step 3.5: Generate Embedding (if enabled)
+            if self.config.embedding.enabled:
+                logger.info("Generating embedding...")
+                try:
+                    from .embedder import DocumentEmbedder
+                    embedder = DocumentEmbedder(
+                        config=self.config,
+                        model_name=self.config.embedding.model,
+                    )
+                    
+                    if self.config.embedding.include_metadata:
+                        # Generate embedding with enriched context
+                        embedding = embedder.embed_with_metadata(
+                            text=text,
+                            title=tagging.title,
+                            entities=tagging.entities,
+                            tags=tagging.tags,
+                        )
+                    else:
+                        # Generate embedding from text only
+                        embedding = embedder.embed_text(
+                            text=text,
+                            max_chars=self.config.embedding.max_chars,
+                        )
+                    
+                    if embedding:
+                        result.embedding = embedding
+                        result.embedding_model = self.config.embedding.model
+                        logger.info(f"Generated embedding ({len(embedding)} dimensions)")
+                    else:
+                        logger.warning("Embedding generation returned None")
+                except ImportError as e:
+                    logger.warning(f"Embedding skipped - sentence-transformers not installed: {e}")
+                except Exception as e:
+                    logger.warning(f"Embedding generation failed: {e}")
+
             # Step 4: Normalize Output
             logger.info("Normalizing output...")
             normalized_tags = self.normalizer.normalize_tags(tagging.tags)

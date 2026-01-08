@@ -174,12 +174,19 @@ export class DocTaggerAPI {
     return response.json();
   }
 
-  async startBatchProcessing(skipProcessed: boolean = true): Promise<{
+  async startBatchProcessing(
+    skipProcessed: boolean = true,
+    forceReprocess: boolean = false
+  ): Promise<{
     message: string;
     progress: BatchProgress;
   }> {
+    const params = new URLSearchParams({
+      skip_processed: String(skipProcessed),
+      force_reprocess: String(forceReprocess),
+    });
     const response = await fetch(
-      `${this.baseUrl}/api/inbox/batch/start?skip_processed=${skipProcessed}`,
+      `${this.baseUrl}/api/inbox/batch/start?${params}`,
       { method: "POST" }
     );
     if (!response.ok) {

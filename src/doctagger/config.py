@@ -22,31 +22,45 @@ class LLMSettings(BaseSettings):
     # Provider selection
     provider: LLMProvider = Field(
         default=LLMProvider.OPENAI,
+        alias="provider",
         description="LLM provider: 'ollama' or 'openai' (for OpenAI-compatible APIs like LM Studio)",
     )
 
     # Common settings
-    model: str = Field(default="zai-org/glm-4.6v-flash", description="Model to use for tagging")
-    timeout: int = Field(default=60, description="Request timeout in seconds")
-    temperature: float = Field(default=0.1, description="Temperature for generation")
-    max_tokens: int = Field(default=500, description="Maximum tokens in response")
+    model: str = Field(
+        default="qwen/qwen3-vl-4b",
+        alias="model",
+        description="Model to use for tagging"
+    )
+    timeout: int = Field(default=60, alias="timeout", description="Request timeout in seconds")
+    temperature: float = Field(default=0.1, alias="temperature", description="Temperature for generation")
+    max_tokens: int = Field(default=500, alias="max_tokens", description="Maximum tokens in response")
 
     # Ollama-specific
     ollama_url: str = Field(
-        default="http://localhost:11434", description="Ollama API URL"
+        default="http://localhost:11434",
+        alias="ollama_url",
+        description="Ollama API URL"
     )
 
     # OpenAI-compatible settings (LM Studio, vLLM, etc.)
     openai_base_url: str = Field(
         default="http://localhost:1234/v1",
+        alias="openai_base_url",
         description="OpenAI-compatible API base URL (LM Studio default: http://localhost:1234/v1)",
     )
     openai_api_key: str = Field(
         default="lm-studio",
+        alias="openai_api_key",
         description="API key (use 'lm-studio' for LM Studio, or your actual key for OpenAI)",
     )
 
-    model_config = SettingsConfigDict(env_prefix="LLM_")
+    model_config = SettingsConfigDict(
+        env_prefix="LLM_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 # Keep OllamaSettings as an alias for backward compatibility
@@ -73,6 +87,31 @@ class OCRSettings(BaseSettings):
     force_ocr: bool = Field(default=False, description="Force OCR even if text exists")
 
     model_config = SettingsConfigDict(env_prefix="OCR_")
+
+
+class EmbeddingSettings(BaseSettings):
+    """Embedding generation settings for RAG and semantic search."""
+
+    enabled: bool = Field(default=True, description="Enable embedding generation")
+    model: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="Sentence-transformers model for embeddings"
+    )
+    max_chars: int = Field(
+        default=8000,
+        description="Maximum characters to use for embedding"
+    )
+    include_metadata: bool = Field(
+        default=True,
+        description="Include title/entities/tags in embedding context"
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="EMBEDDING_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 class TagsSettings(BaseSettings):
@@ -126,6 +165,7 @@ class Config(BaseSettings):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)  # Deprecated
     ocr: OCRSettings = Field(default_factory=OCRSettings)
+    embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     tags: TagsSettings = Field(default_factory=TagsSettings)
     macos_tags: MacOSTagsSettings = Field(default_factory=MacOSTagsSettings)
 

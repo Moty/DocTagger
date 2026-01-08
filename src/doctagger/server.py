@@ -154,6 +154,8 @@ async def get_status() -> SystemStatus:
         llm_available=system_status["llm_available"],
         llm_provider=system_status.get("llm_provider"),
         llm_model=system_status.get("llm_model"),
+        embedding_enabled=config.embedding.enabled,
+        embedding_model=config.embedding.model if config.embedding.enabled else None,
         ollama_available=system_status.get("ollama_available"),
         ollama_model=system_status.get("ollama_model"),
         inbox_folder=str(config.inbox_folder),
@@ -283,6 +285,7 @@ async def list_documents(limit: int = 100) -> List[DocumentListItem]:
                         tags=tagging.get("tags", []),
                         document_date=tagging.get("date"),
                         summary=tagging.get("summary"),
+                        entities=tagging.get("entities", []),
                         processed_at=data.get("timestamp"),
                         size_bytes=pdf_file.stat().st_size,
                     )
@@ -297,6 +300,7 @@ async def list_documents(limit: int = 100) -> List[DocumentListItem]:
                         tags=[],
                         document_date=None,
                         summary=None,
+                        entities=[],
                         processed_at=pdf_file.stat().st_mtime,
                         size_bytes=pdf_file.stat().st_size,
                     )

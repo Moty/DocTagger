@@ -220,6 +220,7 @@ class BatchProcessor:
                                 "tags": result.tagging.tags if result.tagging else [],
                                 "date": result.tagging.date if result.tagging else None,
                                 "summary": result.tagging.summary if result.tagging else None,
+                                "entities": result.tagging.entities if result.tagging else [],
                             }
                         elif result.status.value == "skipped":
                             self.skipped_count += 1

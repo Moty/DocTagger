@@ -54,6 +54,7 @@ Provide a JSON response with the following fields:
 - tags: An array of relevant keywords/tags (max {self.config.tags.max_tags} tags)
 - summary: A brief 1-2 sentence summary of the document
 - date: Any date mentioned in the document (format: YYYY-MM-DD) or null
+- entities: An array of people, organizations, companies, or other named entities mentioned in the document (e.g., sender, recipient, account holder, company names). Include names exactly as they appear.
 - confidence: Your confidence in this classification (0.0 to 1.0)
 
 IMPORTANT: Respond ONLY with the raw JSON object. Do NOT wrap it in markdown code fences (```). Do NOT include any text before or after the JSON."""
@@ -98,6 +99,12 @@ Provide a JSON response with the following fields:
 - title: A concise, descriptive title for the document (max 100 chars)
 - document_type: The type of document (choose from: {categories}, or "other")
 - tags: An array of relevant keywords/tags (max {self.config.tags.max_tags} tags)
+- summary: A brief 1-2 sentence summary of the document
+- date: Any date mentioned in the document (format: YYYY-MM-DD) or null
+- entities: An array of people, organizations, companies, or other named entities mentioned in the document (e.g., sender, recipient, account holder, company names). Include names exactly as they appear.
+- confidence: Your confidence in this classification (0.0 to 1.0)
+
+IMPORTANT: Respond ONLY with the raw JSON object. Do NOT wrap it in markdown code fences (```). Do NOT include any text before or after the JSON."""
 - summary: A brief 1-2 sentence summary of the document
 - date: Any date mentioned in the document (format: YYYY-MM-DD) or null
 - confidence: Your confidence in this classification (0.0 to 1.0)

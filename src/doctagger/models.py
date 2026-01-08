@@ -38,6 +38,7 @@ class TaggingResult(BaseModel):
     tags: List[str] = Field(default_factory=list, description="List of tags")
     summary: Optional[str] = Field(None, description="Brief summary")
     date: Optional[str] = Field(None, description="Document date if found")
+    entities: List[str] = Field(default_factory=list, description="People, organizations, or entities mentioned")
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence score")
 
     @field_validator("tags")
@@ -45,6 +46,12 @@ class TaggingResult(BaseModel):
     def validate_tags(cls, v: List[str]) -> List[str]:
         """Ensure tags are normalized."""
         return [tag.strip().lower() for tag in v if tag.strip()]
+
+    @field_validator("entities")
+    @classmethod
+    def validate_entities(cls, v: List[str]) -> List[str]:
+        """Ensure entities are normalized."""
+        return [e.strip() for e in v if e.strip()]
 
 
 class DocumentMetadata(BaseModel):
@@ -67,6 +74,8 @@ class ProcessingResult(BaseModel):
     sidecar_path: Optional[Path] = None
     metadata: Optional[DocumentMetadata] = None
     tagging: Optional[TaggingResult] = None
+    embedding: Optional[List[float]] = Field(None, description="Document embedding vector for RAG/search")
+    embedding_model: Optional[str] = Field(None, description="Model used to generate embedding")
     ocr_applied: bool = False
     error: Optional[str] = None
     processing_time: float = 0.0
@@ -108,6 +117,7 @@ class DocumentListItem(BaseModel):
     tags: List[str] = Field(default_factory=list)
     document_date: Optional[str] = None  # Date extracted from document content
     summary: Optional[str] = None
+    entities: List[str] = Field(default_factory=list)  # People/orgs mentioned in document
     processed_at: datetime
     size_bytes: int
 
@@ -124,6 +134,9 @@ class SystemStatus(BaseModel):
     llm_available: bool
     llm_provider: Optional[str] = None
     llm_model: Optional[str] = None
+    # Embedding settings
+    embedding_enabled: bool = False
+    embedding_model: Optional[str] = None
     # Deprecated fields for backward compatibility
     ollama_available: Optional[bool] = None
     ollama_model: Optional[str] = None

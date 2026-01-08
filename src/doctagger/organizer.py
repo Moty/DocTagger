@@ -84,6 +84,8 @@ class FileOrganizer:
                 "content_hash": result.content_hash,
                 "metadata": result.metadata.dict() if result.metadata else None,
                 "tagging": result.tagging.dict() if result.tagging else None,
+                "embedding": result.embedding,
+                "embedding_model": result.embedding_model,
                 "error": result.error,
             }
 

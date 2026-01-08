@@ -81,6 +81,7 @@ export function DocumentListExplorer() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedEntities, setSelectedEntities] = useState<string[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedDoc, setSelectedDoc] = useState<DocumentListItem | null>(null);
 
@@ -126,6 +127,15 @@ export function DocumentListExplorer() {
     return Array.from(types).sort();
   }, [documents]);
 
+  // Extract all unique entities (people, organizations)
+  const allEntities = useMemo(() => {
+    const entities = new Set<string>();
+    documents.forEach((doc) => {
+      doc.entities?.forEach((entity) => entities.add(entity));
+    });
+    return Array.from(entities).sort();
+  }, [documents]);
+
   // Filter and sort documents
   const processedDocs = useMemo(() => {
     let result = [...documents];
@@ -138,7 +148,8 @@ export function DocumentListExplorer() {
           doc.path.toLowerCase().includes(query) ||
           doc.title?.toLowerCase().includes(query) ||
           doc.document_type?.toLowerCase().includes(query) ||
-          doc.tags?.some((tag) => tag.toLowerCase().includes(query))
+          doc.tags?.some((tag) => tag.toLowerCase().includes(query)) ||
+          doc.entities?.some((entity) => entity.toLowerCase().includes(query))
       );
     }
 
@@ -153,6 +164,13 @@ export function DocumentListExplorer() {
     if (selectedTypes.length > 0) {
       result = result.filter((doc) =>
         selectedTypes.includes(doc.document_type || "")
+      );
+    }
+
+    // Apply entity filter
+    if (selectedEntities.length > 0) {
+      result = result.filter((doc) =>
+        selectedEntities.some((entity) => doc.entities?.includes(entity))
       );
     }
 
@@ -180,7 +198,7 @@ export function DocumentListExplorer() {
     });
 
     return result;
-  }, [documents, searchQuery, selectedTags, selectedTypes, sortBy, sortOrder]);
+  }, [documents, searchQuery, selectedTags, selectedTypes, selectedEntities, sortBy, sortOrder]);
 
   // Group documents
   const groupedDocs = useMemo(() => {
@@ -273,6 +291,12 @@ export function DocumentListExplorer() {
     );
   };
 
+  const toggleEntity = (entity: string) => {
+    setSelectedEntities((prev) =>
+      prev.includes(entity) ? prev.filter((e) => e !== entity) : [...prev, entity]
+    );
+  };
+
   const handleSort = (column: SortBy) => {
     if (sortBy === column) {
       setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -286,6 +310,7 @@ export function DocumentListExplorer() {
     setSearchQuery("");
     setSelectedTags([]);
     setSelectedTypes([]);
+    setSelectedEntities([]);
   };
 
   // Initialize all groups as expanded
@@ -324,7 +349,7 @@ export function DocumentListExplorer() {
     );
   }
 
-  const hasFilters = searchQuery || selectedTags.length > 0 || selectedTypes.length > 0;
+  const hasFilters = searchQuery || selectedTags.length > 0 || selectedTypes.length > 0 || selectedEntities.length > 0;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
@@ -479,6 +504,29 @@ export function DocumentListExplorer() {
               ))}
               {allTags.length > 12 && (
                 <span className="text-xs text-gray-400">+{allTags.length - 12} more</span>
+              )}
+            </div>
+          )}
+
+          {/* Entity/Person Filter */}
+          {allEntities.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400">People/Orgs:</span>
+              {allEntities.slice(0, 10).map((entity) => (
+                <button
+                  key={entity}
+                  onClick={() => toggleEntity(entity)}
+                  className={`px-2 py-1 text-xs rounded-full transition-colors ${
+                    selectedEntities.includes(entity)
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  }`}
+                >
+                  {entity}
+                </button>
+              ))}
+              {allEntities.length > 10 && (
+                <span className="text-xs text-gray-400">+{allEntities.length - 10} more</span>
               )}
             </div>
           )}
@@ -945,6 +993,25 @@ function DetailPanel({ doc, onClose }: { doc: DocumentListItem; onClose: () => v
                 className="px-2 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full"
               >
                 {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Entities (People/Organizations) */}
+      {doc.entities && doc.entities.length > 0 && (
+        <div className="mb-4">
+          <label className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+            People / Organizations
+          </label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {doc.entities.map((entity, i) => (
+              <span
+                key={i}
+                className="px-2 py-1 text-sm bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full"
+              >
+                {entity}
               </span>
             ))}
           </div>

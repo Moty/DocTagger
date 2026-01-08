@@ -60,10 +60,10 @@ export function BatchProcessingPanel() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const handleStart = async () => {
+  const handleStart = async (forceReprocess: boolean = false) => {
     try {
       setError(null);
-      const result = await api.startBatchProcessing(true);
+      const result = await api.startBatchProcessing(!forceReprocess, forceReprocess);
       setProgress(result.progress);
       isPollingRef.current = true;
     } catch (err) {
@@ -206,13 +206,23 @@ export function BatchProcessingPanel() {
       {/* Control Buttons */}
       <div className="flex gap-3 mb-6">
         {isIdle && (
-          <button
-            onClick={handleStart}
-            disabled={pendingFiles.length === 0}
-            className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Start Processing ({pendingFiles.length} files)
-          </button>
+          <>
+            <button
+              onClick={() => handleStart(false)}
+              disabled={pendingFiles.length === 0}
+              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Start Processing ({pendingFiles.length} files)
+            </button>
+            <button
+              onClick={() => handleStart(true)}
+              disabled={files.length === 0}
+              className="flex-1 bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Re-scan all files with current model settings, overwriting existing archive data"
+            >
+              Re-scan All ({files.length} files)
+            </button>
+          </>
         )}
         
         {isRunning && (

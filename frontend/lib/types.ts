@@ -6,6 +6,7 @@ export interface TaggingResult {
   tags: string[];
   summary: string | null;
   date: string | null;
+  entities: string[];  // People, organizations, companies mentioned
   confidence: number;
 }
 
@@ -43,6 +44,9 @@ export interface SystemStatus {
   llm_available: boolean;
   llm_provider: string | null;
   llm_model: string | null;
+  // Embedding settings
+  embedding_enabled: boolean;
+  embedding_model: string | null;
   // Deprecated fields for backward compatibility
   ollama_available?: boolean;
   ollama_model?: string | null;
@@ -60,6 +64,7 @@ export interface DocumentListItem {
   tags: string[];
   document_date: string | null;  // Date extracted from document content (YYYY-MM-DD)
   summary: string | null;
+  entities: string[];  // People, organizations, companies mentioned
   processed_at: string;
   size_bytes: number;
 }
@@ -154,6 +159,7 @@ export interface ProcessedFile {
     tags?: string[];
     date?: string;  // Date extracted from document content (YYYY-MM-DD)
     summary?: string;
+    entities?: string[];  // People, organizations mentioned
   };
 }
 
