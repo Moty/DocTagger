@@ -105,11 +105,6 @@ Provide a JSON response with the following fields:
 - confidence: Your confidence in this classification (0.0 to 1.0)
 
 IMPORTANT: Respond ONLY with the raw JSON object. Do NOT wrap it in markdown code fences (```). Do NOT include any text before or after the JSON."""
-- summary: A brief 1-2 sentence summary of the document
-- date: Any date mentioned in the document (format: YYYY-MM-DD) or null
-- confidence: Your confidence in this classification (0.0 to 1.0)
-
-IMPORTANT: Respond ONLY with the raw JSON object. Do NOT wrap it in markdown code fences (```). Do NOT include any text before or after the JSON."""
 
         return prompt
 
