@@ -3,6 +3,7 @@ watchdog>=3.0.0
 ocrmypdf>=15.0.0
 PyPDF2>=3.0.0
 pdfplumber>=0.10.0
+pymupdf>=1.24.0  # For vision mode PDF-to-image conversion
 ollama>=0.1.0
 openai>=1.0.0
 fastapi>=0.104.0

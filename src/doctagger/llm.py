@@ -1,8 +1,11 @@
 """LLM integration supporting Ollama and OpenAI-compatible APIs (LM Studio, vLLM, etc.)."""
 
+import base64
+import io
 import json
 import logging
-from typing import Optional
+from pathlib import Path
+from typing import List, Optional
 
 import ollama
 from openai import OpenAI
@@ -58,6 +61,165 @@ Provide a JSON response with the following fields:
 - confidence: Your confidence in this classification (0.0 to 1.0)
 
 IMPORTANT: Respond ONLY with the raw JSON object. Do NOT wrap it in markdown code fences (```). Do NOT include any text before or after the JSON."""
+
+    def get_vision_prompt(self) -> str:
+        """Get the prompt template for vision models (no {text} placeholder)."""
+        categories = ", ".join(self.config.tags.custom_categories)
+        return f"""Analyze the document image(s) shown and provide structured information about it.
+
+Look carefully at ALL text visible in the image including headers, dates, amounts, names, and any other content.
+
+Provide a JSON response with the following fields:
+- title: A concise, descriptive title for the document (max 100 chars)
+- document_type: The type of document (choose from: {categories}, or "other")
+- tags: An array of relevant keywords/tags (max {self.config.tags.max_tags} tags)
+- summary: A brief 1-2 sentence summary of the document
+- date: The most relevant date from the document (format: YYYY-MM-DD) or null. Look for dates in headers, footings, or prominently displayed.
+- entities: An array of people, organizations, companies, or other named entities mentioned in the document (e.g., sender, recipient, account holder, company names). Include names exactly as they appear.
+- confidence: Your confidence in this classification (0.0 to 1.0)
+
+IMPORTANT: Respond ONLY with the raw JSON object. Do NOT wrap it in markdown code fences (```). Do NOT include any text before or after the JSON."""
+
+    def pdf_to_images(self, pdf_path: Path) -> List[str]:
+        """
+        Convert PDF pages to base64-encoded images for vision models.
+
+        Args:
+            pdf_path: Path to the PDF file
+
+        Returns:
+            List of base64-encoded images (JPEG format)
+        """
+        try:
+            import fitz  # PyMuPDF
+
+            images = []
+            max_pages = self.config.llm.vision_max_pages
+            dpi = self.config.llm.vision_dpi
+            zoom = dpi / 72  # 72 DPI is the default
+
+            with fitz.open(pdf_path) as pdf:
+                pages_to_process = min(len(pdf), max_pages)
+                logger.info(f"Converting {pages_to_process} PDF pages to images (DPI: {dpi})")
+
+                for page_num in range(pages_to_process):
+                    page = pdf[page_num]
+                    # Render page to image with specified DPI
+                    mat = fitz.Matrix(zoom, zoom)
+                    pix = page.get_pixmap(matrix=mat)
+
+                    # Convert to JPEG bytes
+                    img_bytes = pix.tobytes("jpeg")
+
+                    # Encode to base64
+                    b64_image = base64.b64encode(img_bytes).decode("utf-8")
+                    images.append(b64_image)
+                    logger.debug(f"Converted page {page_num + 1} to image ({len(img_bytes)} bytes)")
+
+            return images
+
+        except ImportError:
+            logger.error("PyMuPDF (fitz) is required for vision mode. Install with: pip install pymupdf")
+            raise RuntimeError("PyMuPDF not installed. Run: pip install pymupdf")
+        except Exception as e:
+            logger.error(f"Failed to convert PDF to images: {e}")
+            raise RuntimeError(f"PDF to image conversion failed: {e}")
+
+    def _call_openai_vision(self, images: List[str], prompt: str) -> str:
+        """
+        Call OpenAI-compatible API with vision (images).
+
+        Args:
+            images: List of base64-encoded images
+            prompt: The text prompt
+
+        Returns:
+            LLM response text
+        """
+        try:
+            # Build message content with images
+            content = []
+
+            # Add each image
+            for i, img_b64 in enumerate(images):
+                content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{img_b64}",
+                        "detail": "high"  # Use high detail for document reading
+                    }
+                })
+                logger.debug(f"Added image {i + 1} to vision request")
+
+            # Add the text prompt
+            content.append({
+                "type": "text",
+                "text": prompt
+            })
+
+            logger.info(f"Sending {len(images)} images to vision model: {self.config.llm.model}")
+
+            response = self.openai_client.chat.completions.create(
+                model=self.config.llm.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a document analysis assistant with excellent OCR and reading skills. You MUST respond with valid JSON only. Never use markdown code fences (```). Never add explanatory text before or after the JSON.",
+                    },
+                    {
+                        "role": "user",
+                        "content": content,
+                    },
+                ],
+                temperature=self.config.llm.temperature,
+                max_tokens=self.config.llm.max_tokens,
+            )
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            raise RuntimeError(f"OpenAI vision API error: {e}")
+
+    def tag_with_vision(self, pdf_path: Path) -> TaggingResult:
+        """
+        Tag a document using vision model (sending PDF pages as images).
+
+        Args:
+            pdf_path: Path to the PDF file
+
+        Returns:
+            TaggingResult with extracted information
+
+        Raises:
+            RuntimeError: If tagging fails
+        """
+        logger.info(f"Using vision model to analyze PDF: {pdf_path.name}")
+
+        try:
+            # Convert PDF to images
+            images = self.pdf_to_images(pdf_path)
+
+            if not images:
+                raise RuntimeError("No images extracted from PDF")
+
+            # Get vision prompt
+            prompt = self.get_vision_prompt()
+
+            # Call vision model
+            response_text = self._call_openai_vision(images, prompt)
+
+            logger.debug(f"Vision LLM response: {response_text}")
+
+            result = self.parse_response(response_text)
+
+            logger.info(
+                f"Vision tagging completed: {result.title} ({result.document_type}), "
+                f"date: {result.date}, {len(result.tags)} tags, {len(result.entities)} entities"
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Vision tagging failed: {e}")
+            raise RuntimeError(f"Vision tagging failed: {e}")
 
     def create_prompt(
         self, text: str, max_chars: int = 8000, custom_template: Optional[str] = None

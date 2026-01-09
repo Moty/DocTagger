@@ -55,6 +55,20 @@ class LLMSettings(BaseSettings):
         description="API key (use 'lm-studio' for LM Studio, or your actual key for OpenAI)",
     )
 
+    # Vision model settings
+    vision_enabled: bool = Field(
+        default=False,
+        description="Enable vision mode - send PDF pages as images to vision LLM instead of text",
+    )
+    vision_max_pages: int = Field(
+        default=3,
+        description="Maximum number of pages to send as images (for vision models)",
+    )
+    vision_dpi: int = Field(
+        default=150,
+        description="DPI for rendering PDF pages to images (higher = better quality but slower)",
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="LLM_",
         env_file=".env",

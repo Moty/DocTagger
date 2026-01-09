@@ -69,31 +69,43 @@ class DocumentProcessor:
         )
 
         try:
-            # Step 1: OCR Processing
+            # Step 1: OCR Processing (skip if using vision mode)
             ocr_applied = False
-            if not skip_ocr and self.config.ocr.enabled:
-                try:
-                    # Create temp file for OCR output
-                    temp_path = self.config.temp_folder / f"ocr_{pdf_path.name}"
-                    self.ocr_processor.process(pdf_path, temp_path)
-                    ocr_applied = True
-                    pdf_path = temp_path  # Use OCR'd version for subsequent steps
-                    logger.info("OCR processing completed")
-                except Exception as e:
-                    logger.warning(f"OCR failed, continuing without OCR: {e}")
+            text = ""
+            
+            if self.config.llm.vision_enabled:
+                # Vision mode: skip OCR and text extraction, use images directly
+                logger.info("Vision mode enabled - skipping OCR and text extraction")
+            else:
+                # Traditional mode: OCR if needed, then text extraction
+                if not skip_ocr and self.config.ocr.enabled:
+                    try:
+                        # Create temp file for OCR output
+                        temp_path = self.config.temp_folder / f"ocr_{pdf_path.name}"
+                        self.ocr_processor.process(pdf_path, temp_path)
+                        ocr_applied = True
+                        pdf_path = temp_path  # Use OCR'd version for subsequent steps
+                        logger.info("OCR processing completed")
+                    except Exception as e:
+                        logger.warning(f"OCR failed, continuing without OCR: {e}")
+
+                # Step 2: Text Extraction
+                logger.info("Extracting text...")
+                text = self.text_extractor.extract(pdf_path)
+
+                if not text.strip():
+                    raise RuntimeError("No text could be extracted from the PDF")
 
             result.ocr_applied = ocr_applied
 
-            # Step 2: Text Extraction
-            logger.info("Extracting text...")
-            text = self.text_extractor.extract(pdf_path)
-
-            if not text.strip():
-                raise RuntimeError("No text could be extracted from the PDF")
-
             # Step 3: LLM Tagging
             logger.info("Tagging with LLM...")
-            tagging: TaggingResult = self.llm_tagger.tag(text)
+            if self.config.llm.vision_enabled:
+                # Use vision model - send PDF images
+                tagging: TaggingResult = self.llm_tagger.tag_with_vision(original_path)
+            else:
+                # Use text-based tagging
+                tagging: TaggingResult = self.llm_tagger.tag(text)
             result.tagging = tagging
 
             # Step 3.5: Generate Embedding (if enabled)
@@ -106,7 +118,16 @@ class DocumentProcessor:
                         model_name=self.config.embedding.model,
                     )
                     
-                    if self.config.embedding.include_metadata:
+                    # In vision mode, we don't have text, so use metadata for embedding
+                    if self.config.llm.vision_enabled or not text.strip():
+                        # Generate embedding from metadata only
+                        embedding = embedder.embed_with_metadata(
+                            text=tagging.summary or "",  # Use summary as base text
+                            title=tagging.title,
+                            entities=tagging.entities,
+                            tags=tagging.tags,
+                        )
+                    elif self.config.embedding.include_metadata:
                         # Generate embedding with enriched context
                         embedding = embedder.embed_with_metadata(
                             text=text,
